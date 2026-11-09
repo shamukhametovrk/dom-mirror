@@ -1,0 +1,6 @@
+# Сборка образа из исходников вместо готового (для разработки):
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  dom-mirror:
+    image: dom-mirror:local
+    build: .

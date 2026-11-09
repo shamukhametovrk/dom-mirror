@@ -55,7 +55,7 @@ cd ~/dom-mirror
 sudo docker compose restart     # перезапустить
 sudo docker compose down        # остановить
 sudo docker compose up -d       # запустить снова
-git pull && sudo docker compose up -d --build   # обновить
+git pull && sudo docker compose pull && sudo docker compose up -d   # обновить
 ```
 
 Входы в аккаунты сохраняются при перезапуске и обновлении.

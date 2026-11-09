@@ -37,9 +37,19 @@ ask() {  # ask "вопрос" значение_по_умолчанию → от�
 }
 
 # Страна IP: от неё зависят часовой пояс и язык браузера — сайты сверяют их с IP.
-GEO=$(curl -fsS --max-time 10 https://ipapi.co/json/ 2>/dev/null || true)
-IP=$(json_field ip <<<"$GEO")
-[ -n "$IP" ] || IP=$(curl -fsS --max-time 10 https://api.ipify.org || curl -fsS --max-time 10 https://ifconfig.me) \
+# Бесплатные сервисы геолокации часто отказывают облачным IP, поэтому пробуем несколько по очереди.
+geo_try() {  # geo_try URL поле_ip поле_пояса поле_страны → "ip пояс страна" или ничего
+  local json
+  json=$(curl -fsS --max-time 10 "$1" 2>/dev/null || true)
+  [ -n "$(json_field "$3" <<<"$json")" ] || return 1
+  echo "$(json_field "$2" <<<"$json") $(json_field "$3" <<<"$json") $(json_field "$4" <<<"$json")"
+}
+GEO=$(geo_try https://ipapi.co/json/ ip timezone country_code \
+  || geo_try https://ipinfo.io/json ip timezone country \
+  || geo_try http://ip-api.com/json/ query timezone countryCode \
+  || true)
+read -r IP TZ_GEO COUNTRY <<<"$GEO" || true
+[ -n "${IP:-}" ] || IP=$(curl -fsS --max-time 10 https://api.ipify.org || curl -fsS --max-time 10 https://ifconfig.me) \
   || die "не удалось определить внешний IP сервера"
 echo "IP сервера: $IP"
 
@@ -50,18 +60,33 @@ DEFAULT_DOMAIN="$IP.sslip.io"
 DOMAIN=$(ask "Домен (Enter — оставить)" "$DEFAULT_DOMAIN")
 set_var DOMAIN "$DOMAIN"
 
-TZ_GEO=$(json_field timezone <<<"$GEO")
-LANG_GEO=$(json_field languages <<<"$GEO" | cut -d, -f1)
-if [ -n "$TZ_GEO" ] && [ -n "$LANG_GEO" ]; then
-  BASE=${LANG_GEO%%-*}
-  if [ "$BASE" = en ]; then LANGS="$LANG_GEO,en"
-  elif [ "$LANG_GEO" = "$BASE" ]; then LANGS="$BASE,en-US,en"
-  else LANGS="$LANG_GEO,$BASE,en-US,en"; fi
-  set_var TZ "$TZ_GEO"
-  set_var ACCEPT_LANGUAGES "$LANGS"
-  echo "часовой пояс и языки по стране сервера: $TZ_GEO, $LANGS"
+languages_for() {  # код страны → языки браузера, как у местного пользователя
+  case "$1" in
+    RU|BY) echo "ru-RU,ru,en-US,en" ;;      KZ) echo "ru-KZ,ru,kk,en-US,en" ;;
+    UA) echo "uk-UA,uk,en-US,en" ;;          DE|AT) echo "de-DE,de,en-US,en" ;;
+    CH) echo "de-CH,de,fr,en-US,en" ;;       NL) echo "nl-NL,nl,en-US,en" ;;
+    FI) echo "fi-FI,fi,en-US,en" ;;          FR) echo "fr-FR,fr,en-US,en" ;;
+    PL) echo "pl-PL,pl,en-US,en" ;;          ES) echo "es-ES,es,en-US,en" ;;
+    IT) echo "it-IT,it,en-US,en" ;;          PT) echo "pt-PT,pt,en-US,en" ;;
+    BR) echo "pt-BR,pt,en-US,en" ;;          SE) echo "sv-SE,sv,en-US,en" ;;
+    NO) echo "nb-NO,nb,no,en-US,en" ;;       DK) echo "da-DK,da,en-US,en" ;;
+    CZ) echo "cs-CZ,cs,en-US,en" ;;          TR) echo "tr-TR,tr,en-US,en" ;;
+    LT) echo "lt-LT,lt,en-US,en" ;;          LV) echo "lv-LV,lv,en-US,en" ;;
+    EE) echo "et-EE,et,en-US,en" ;;          GE) echo "ka-GE,ka,en-US,en" ;;
+    AM) echo "hy-AM,hy,ru,en-US,en" ;;       RS) echo "sr-RS,sr,en-US,en" ;;
+    JP) echo "ja-JP,ja,en-US,en" ;;          KR) echo "ko-KR,ko,en-US,en" ;;
+    GB|IE) echo "en-GB,en" ;;                US|CA|AU|NZ|SG) echo "en-US,en" ;;
+    *) echo "" ;;
+  esac
+}
+LANGS=$(languages_for "${COUNTRY:-}")
+if [ -n "${TZ_GEO:-}" ]; then set_var TZ "$TZ_GEO"; fi
+if [ -n "$LANGS" ]; then set_var ACCEPT_LANGUAGES "$LANGS"; fi
+if [ -n "${TZ_GEO:-}" ] && [ -n "$LANGS" ]; then
+  echo "страна сервера $COUNTRY: часовой пояс $TZ_GEO, языки $LANGS"
 else
-  echo "страну сервера определить не удалось — оставляю TZ=$(get_var TZ), ACCEPT_LANGUAGES=$(get_var ACCEPT_LANGUAGES)"
+  echo "страну сервера определить не удалось полностью — сейчас TZ=$(get_var TZ), ACCEPT_LANGUAGES=$(get_var ACCEPT_LANGUAGES)"
+  echo "  при необходимости поправьте их в .env и запустите install.sh ещё раз"
 fi
 
 gen_password() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16 || true; }
@@ -88,8 +113,9 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: a
 fi
 
 # --- 3. Запуск -------------------------------------------------------------
-say "Сборка и запуск (первый раз скачивается около 1 ГБ — это несколько минут)"
-docker compose up -d --build
+say "Загрузка и запуск (первый раз скачивается около 700 МБ — обычно пара минут)"
+docker compose pull
+docker compose up -d
 
 say "Браузер"
 READY=no

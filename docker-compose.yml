@@ -1,7 +1,7 @@
 services:
   dom-mirror:
-    build: .
-    image: dom-mirror:local
+    # готовый образ собирает GitHub Actions; собрать самому — см. docs/operations.md, «Разработка»
+    image: ${IMAGE:-ghcr.io/shamukhametovrk/dom-mirror:latest}
     restart: unless-stopped
     init: true                 # подбирает завершившиеся процессы Chrome
     shm_size: 1gb              # Chrome держит общую память в /dev/shm

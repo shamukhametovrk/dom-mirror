@@ -1,6 +1,8 @@
 node_modules
 .git
+.github
 .data
 .env
 test
 docs
+bench

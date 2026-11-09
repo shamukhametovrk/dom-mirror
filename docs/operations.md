@@ -72,6 +72,13 @@ npm install
 npm run check      # линтер, проверка типов, тесты
 ```
 
+Готовый образ `ghcr.io/shamukhametovrk/dom-mirror` собирает GitHub Actions (`.github/workflows/image.yml`)
+на каждый push в `main`, после проверок. Собрать образ из своих исходников:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
 Без Docker сервер подключается к любому Chrome с `--remote-debugging-port`:
 
 ```sh
