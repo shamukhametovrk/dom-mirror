@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { proxied, rewriteCss, rewriteEvent } from "../rewrite.js";
+import { proxied, rewriteCss, rewriteEvent } from "../src/resources/rewrite.js";
 
 const BASE = "https://site.test/dir/page.html";
 const p = (url) => "/r?u=" + encodeURIComponent(url);

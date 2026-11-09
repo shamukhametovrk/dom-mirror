@@ -14,6 +14,7 @@ export default [
       "no-else-return": "error",
       "no-lonely-if": "error",
       "prefer-const": "error",
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_", ignoreRestSiblings: true }],
     },
   },
   { files: ["src/**", "test/**", "*.js"], languageOptions: { globals: globals.node } },
