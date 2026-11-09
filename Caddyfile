@@ -1,0 +1,8 @@
+# Внешний вход. DOMAIN из .env:
+#   203.0.113.7.sslip.io (или свой домен) — HTTPS с автоматическим сертификатом Let's Encrypt;
+#   localhost — HTTPS с локальным сертификатом Caddy (браузер предупредит);
+#   :80 — без HTTPS, для запуска на своём компьютере.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy dom-mirror:8080
+}

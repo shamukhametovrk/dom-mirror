@@ -57,7 +57,9 @@ export async function login(page, mirror, password) {
 export async function command(mirror, cookie, msg) {
   const { default: WebSocket } = await import("ws");
   const url = new URL(mirror);
-  const ws = new WebSocket(`ws://${url.host}/ws`, { headers: { Origin: url.origin, Cookie: cookie } });
+  const scheme = url.protocol === "https:" ? "wss" : "ws";
+  // стенд ходит и на локальный HTTPS Caddy (DOMAIN=localhost) с самоподписанным сертификатом
+  const ws = new WebSocket(`${scheme}://${url.host}/ws`, { headers: { Origin: url.origin, Cookie: cookie }, rejectUnauthorized: false });
   await new Promise((resolve, reject) => { ws.on("open", resolve); ws.on("error", reject); });
   ws.send(JSON.stringify(msg));
   await sleep(200);

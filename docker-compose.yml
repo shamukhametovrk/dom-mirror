@@ -6,17 +6,33 @@ services:
     init: true                 # подбирает завершившиеся процессы Chrome
     shm_size: 1gb              # Chrome держит общую память в /dev/shm
     environment:
-      PASSWORD: ${PASSWORD:-}  # пусто — пароль сгенерируется при первом запуске и попадёт в лог
+      PASSWORD: ${PASSWORD:-}  # пусто — пароль сгенерируется при первом запуске (docker compose exec dom-mirror cat /data/password)
       START_URL: ${START_URL:-https://ru.wikipedia.org/}
       TZ: ${TZ:-Europe/Moscow}
       ACCEPT_LANGUAGES: ${ACCEPT_LANGUAGES:-ru-RU,ru,en-US,en}
-      TRUST_PROXY: ${TRUST_PROXY:-0}
+      TRUST_PROXY: "1"         # снаружи только Caddy
       FRAMES: ${FRAMES:-1}
       DEBUG: ${DEBUG:-0}
-    ports:
-      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8095}:8080"
     volumes:
       - chrome-profile:/data   # профиль Chrome и пароль: переживают пересоздание контейнера
 
+  # HTTPS снаружи: сам получает и продлевает сертификат Let's Encrypt для DOMAIN
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [dom-mirror]
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # сертификаты: не удаляйте, иначе упрётесь в лимиты Let's Encrypt
+      - caddy-config:/config
+
 volumes:
   chrome-profile:
+  caddy-data:
+  caddy-config:

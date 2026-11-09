@@ -24,7 +24,7 @@ rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 rm -f "$PROFILE"/.com.google.Chrome.*
 
 Xvfb :99 -screen 0 3840x2160x24 -nolisten tcp &
-for i in $(seq 1 50); do [ -S /tmp/.X11-unix/X99 ] && break; sleep 0.1; done
+for _ in $(seq 1 50); do [ -S /tmp/.X11-unix/X99 ] && break; sleep 0.1; done
 
 # WebGL: без GPU включаем программный ANGLE/SwiftShader — у настоящего десктопа WebGL есть всегда
 google-chrome \
@@ -38,7 +38,7 @@ google-chrome \
   about:blank >/tmp/chrome.log 2>&1 &
 
 # ждём, пока Chrome откроет порт отладки
-for i in $(seq 1 50); do
+for _ in $(seq 1 50); do
   curl -fs http://127.0.0.1:9222/json/version >/dev/null 2>&1 && break
   sleep 0.2
 done
