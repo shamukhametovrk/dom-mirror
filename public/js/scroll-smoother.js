@@ -1,10 +1,11 @@
 // @ts-check
-// Серверный Chrome отдаёт позиции прокрутки неровно (через 20–70 мс), и копия, повторяя их, дёргалась.
-// Поэтому копия плавно догоняет последнюю позицию сервера на каждом своём кадре.
+// Позиции прокрутки от сервера (программные прокрутки сайта, колесо над тем, что копия не прокручивает сама)
+// приходят неровно, через 20–70 мс. Копия плавно догоняет последнюю позицию на каждом своём кадре.
 // Далёкие переходы (якорь, «в начало») применяются сразу.
 
 /** @typedef {{ id: number, x: number, y: number }} ScrollData */
 /** @typedef {{ x: number, y: number, tx: number, ty: number }} Motion */
+/** @typedef {Window | Element} Scroller */
 
 const TAU_MS = 25;
 const SNAP_PX = 0.5;
@@ -24,19 +25,17 @@ export function advance(m, elapsedMs) {
 /** @param {Motion} m */
 export const isFarJump = (m) => Math.max(Math.abs(m.tx - m.x), Math.abs(m.ty - m.y)) > JUMP_PX;
 
-/** @param {Node} node @returns {Window | Element | null} */
+/** @param {Node} node @returns {Scroller | null} */
 const scrollerOf = (node) => (node?.nodeType === Node.DOCUMENT_NODE ? /** @type {Document} */ (node).defaultView : /** @type {Element} */ (node));
 
-/** @param {Window | Element} s */
+/** @param {Scroller} s */
 const positionOf = (s) => ("scrollX" in s ? { x: s.scrollX, y: s.scrollY } : { x: s.scrollLeft, y: s.scrollTop });
 
-/** @param {Window | Element} s @param {Motion} m */
+/** @param {Scroller} s @param {Motion} m */
 const place = (s, m) => s.scrollTo({ left: m.x, top: m.y, behavior: "instant" });
 
-/** @param {any} replayer */
-export function smoothScrolling(replayer) {
-  /** @type {Map<Window | Element, Motion>} */
-  const motions = new Map();
+/** @param {Map<Scroller, Motion>} motions */
+function createFrameLoop(motions) {
   let last = 0;
   const frame = (now) => {
     for (const [scroller, m] of motions) {
@@ -47,16 +46,27 @@ export function smoothScrolling(replayer) {
     last = now;
     if (motions.size) requestAnimationFrame(frame);
   };
-  const start = () => {
+  return () => {
     last = performance.now();
     requestAnimationFrame(frame);
   };
-  replayer.applyScroll = (/** @type {ScrollData} */ data) => {
-    const scroller = scrollerOf(replayer.getMirror().getNode(data.id));
-    if (!scroller) return;
+}
+
+/** @param {any} replayer @param {(scroller: Scroller, data: ScrollData) => boolean} ignores */
+export function smoothScrolling(replayer, ignores) {
+  /** @type {Map<Scroller, Motion>} */
+  const motions = new Map();
+  const startLoop = createFrameLoop(motions);
+  /** @param {Scroller} scroller @param {ScrollData} data */
+  const move = (scroller, data) => {
     const m = Object.assign(motions.get(scroller) ?? positionOf(scroller), { tx: data.x, ty: data.y });
     if (isFarJump(m)) return place(scroller, Object.assign(m, { x: m.tx, y: m.ty }));
-    if (!motions.size) start();
+    if (!motions.size) startLoop();
     motions.set(scroller, m);
   };
+  replayer.applyScroll = (/** @type {ScrollData} */ data) => {
+    const scroller = scrollerOf(replayer.getMirror().getNode(data.id));
+    if (scroller && !ignores(scroller, data)) move(scroller, data);
+  };
+  return { move };
 }

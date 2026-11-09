@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSmoothWheel, easedStep, isNotch } from "../src/browser/smooth-wheel.js";
+import { createSmoothWheel, easedStep, isNotch } from "../shared/smooth-wheel.js";
 import { createInputDispatcher } from "../src/browser/input-dispatcher.js";
 import { sleep } from "../src/util/async.js";
 import { createFakeSession } from "./fakes.js";
@@ -49,4 +49,29 @@ test("диспетчер: щелчок анимируется, тачпад и C
   const animated = wheels().slice(2).map((w) => w.deltaY);
   assert.ok(animated.length > 5);
   assert.ok(Math.abs(sum(animated) - 100) < 1e-9);
+});
+
+test("takeRemaining: остаток пути одним куском, анимация останавливается", () => {
+  const steps = [];
+  const wheel = createSmoothWheel((step) => steps.push(step.dy), () => {});
+  wheel.add({ dx: 0, dy: 100 });
+  const rest = wheel.takeRemaining();
+  assert.equal(wheel.running, false);
+  assert.ok(Math.abs(steps[0] + rest.dy - 100) < 1e-9);
+});
+
+test("диспетчер: raw-шаг от копии уходит сразу, без серверной анимации", async () => {
+  const session = createFakeSession();
+  const dispatch = createInputDispatcher({ session, world: /** @type {any} */ ({}) });
+  await dispatch({ type: "wheel", x: 1, y: 1, dx: 0, dy: 100, raw: true });
+  await sleep(100);
+  assert.deepEqual(session.calls.filter((c) => c.params.type === "mouseWheel").map((c) => c.params.deltaY), [100]);
+});
+
+test("диспетчер: scrollTo ставит позицию узла в мире агента", async () => {
+  const expressions = [];
+  const world = /** @type {any} */ ({ evaluate: async (e) => { expressions.push(e); } });
+  await createInputDispatcher({ session: createFakeSession(), world })({ type: "scrollTo", id: 7, x: 0, y: 1234.5 });
+  assert.match(expressions[0], /getNode\(7\)/);
+  assert.match(expressions[0], /top: 1234\.5/);
 });

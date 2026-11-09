@@ -4,14 +4,15 @@
 /** @typedef {"left" | "middle" | "right"} MouseButton */
 /** @typedef {Point & { type: "move" }} MoveMessage */
 /** @typedef {Point & { type: "down" | "up", button: MouseButton, count: number }} ButtonMessage */
-/** @typedef {Point & { type: "wheel", dx: number, dy: number }} WheelMessage */
+/** @typedef {Point & { type: "wheel", dx: number, dy: number, raw?: boolean }} WheelMessage raw — шаг уже разложен копией */
 /**
  * @typedef {{ type: "keydown" | "keyup", key: string, code: string, keyCode: number, loc: number, repeat: boolean,
  *   ctrl: boolean, alt: boolean, meta: boolean, shift: boolean, altgr: boolean }} KeyMessage
  */
 /** @typedef {{ type: "text", text: string }} TextMessage */
 /** @typedef {{ type: "fill", id: number, value: string }} FillMessage */
-/** @typedef {MoveMessage | ButtonMessage | WheelMessage | KeyMessage | TextMessage | FillMessage} InputMessage */
+/** @typedef {{ type: "scrollTo", id: number, x: number, y: number }} ScrollToMessage */
+/** @typedef {MoveMessage | ButtonMessage | WheelMessage | KeyMessage | TextMessage | FillMessage | ScrollToMessage} InputMessage */
 /** @typedef {{ type: "viewport", w: number, h: number }} ViewportMessage */
 /** @typedef {{ type: "goto", url: string }} GotoMessage */
 /** @typedef {{ type: "back" | "forward" | "reload" }} HistoryMessage */
@@ -54,11 +55,12 @@ const SCHEMAS = {
   move: POINT,
   down: { ...POINT, button, count: num },
   up: { ...POINT, button, count: num },
-  wheel: { ...POINT, dx: num, dy: num },
+  wheel: { ...POINT, dx: num, dy: num, raw: optional(bool) },
   keydown: KEY,
   keyup: KEY,
   text: { text: str },
   fill: { id: num, value: str },
+  scrollTo: { id: num, x: num, y: num },
   viewport: { w: num, h: num },
   goto: { url: str },
   back: {},

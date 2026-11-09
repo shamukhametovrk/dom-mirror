@@ -33,12 +33,19 @@ function createMoveThrottle(send) {
   return { queue, flush };
 }
 
-/** @param {HTMLElement} overlay @param {Send} send @param {() => void} onPress */
-export function bindMouse(overlay, send, onPress) {
-  const position = (e) => {
-    const r = overlay.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top, mod: modifierMask(e) };
-  };
+/** @param {HTMLElement} overlay */
+const positionIn = (overlay) => (/** @type {MouseEvent} */ e) => {
+  const r = overlay.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top, mod: modifierMask(e) };
+};
+
+/**
+ * onWheel возвращает true, если копия прокрутила сама; иначе колесо уходит на сервер.
+ * @param {HTMLElement} overlay @param {Send} send
+ * @param {{ onPress: () => void, onWheel: (wheel: import("./local-scroll.js").Wheel) => boolean }} hooks
+ */
+export function bindMouse(overlay, send, { onPress, onWheel }) {
+  const position = positionIn(overlay);
   const buttonMessage = (type, e) => ({ type, ...position(e), button: BUTTONS[e.button] ?? "left", count: e.detail || 1 });
   const moves = createMoveThrottle(send);
   const held = new Set();
@@ -57,15 +64,21 @@ export function bindMouse(overlay, send, onPress) {
     send(buttonMessage("up", e));
   }, true);
   window.addEventListener("mousemove", (e) => (held.size || e.target === overlay) && moves.queue({ type: "move", ...position(e) }));
-  bindWheel(overlay, send, position);
+  bindWheel(overlay, position, (wheel, e) => {
+    if (!e.ctrlKey && onWheel(wheel)) return;   // Ctrl+колесо — масштаб на сервере
+    send({ type: "wheel", ...wheel });
+  });
 }
 
-/** @param {HTMLElement} overlay @param {Send} send @param {(e: MouseEvent) => { x: number, y: number, mod: number }} position */
-function bindWheel(overlay, send, position) {
+/**
+ * @param {HTMLElement} overlay @param {(e: MouseEvent) => { x: number, y: number, mod: number }} position
+ * @param {(wheel: import("./local-scroll.js").Wheel, e: WheelEvent) => void} onWheel
+ */
+function bindWheel(overlay, position, onWheel) {
   const scale = (e) => [1, LINE_HEIGHT_PX, overlay.clientHeight][e.deltaMode] ?? 1;
   overlay.addEventListener("contextmenu", (e) => e.preventDefault());
   overlay.addEventListener("wheel", (e) => {
     e.preventDefault();
-    send({ type: "wheel", ...position(e), dx: e.deltaX * scale(e), dy: e.deltaY * scale(e) });
+    onWheel({ ...position(e), dx: e.deltaX * scale(e), dy: e.deltaY * scale(e) }, e);
   }, { passive: false });
 }

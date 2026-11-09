@@ -2,6 +2,7 @@
 // Воспроизведение копии. Ввод всегда уходит на сервер, а текст в полях приходит обратно от rrweb.
 import { EventType, IncrementalSource } from "../../shared/protocol.js";
 import { smoothScrolling } from "./scroll-smoother.js";
+import { createLocalScroll } from "./local-scroll.js";
 
 /** @typedef {import("../../shared/protocol.js").FocusState} FocusState */
 /** @typedef {Record<string, (e: Event) => void>} Handlers */
@@ -28,17 +29,38 @@ function focusField(el, focus) {
   } catch { /* поле без выделения (type=email и т.п.) */ }
 }
 
-/** @param {{ root: HTMLElement, handlers: Handlers, onFill: (id: number, value: string) => void, onBlur: () => void }} deps */
-export function createPlayer({ root, handlers, onFill, onBlur }) {
-  let replayer = null;
-  const mirror = () => replayer.getMirror();
-  const iframeHandlers = { ...handlers, input: createFillWatcher(mirror, onFill) };
-
-  // rrweb пересобирает документ через document.open(), который стирает обработчики окна iframe
-  const hookIframe = () => {
-    const win = replayer?.iframe?.contentWindow;
-    for (const [type, fn] of Object.entries(win ? iframeHandlers : {})) win.addEventListener(type, fn, true);
+// Прокрутка: копия ведёт её сама (local-scroll), позиции сервера — для остального (scroll-smoother).
+/** @param {() => any} getReplayer @param {(msg: import("../../shared/protocol.js").ClientMessage) => void} send */
+function createScrolling(getReplayer, send) {
+  let smoother = null;
+  const local = createLocalScroll({ getReplayer, send, adopt: (scroller, data) => smoother?.move(scroller, data) });
+  return {
+    attach(replayer) {
+      local.reset();
+      smoother = smoothScrolling(replayer, local.ignores);
+      replayer.on("fullsnapshot-rebuilded", local.reset);
+    },
+    handle: local.handle,
+    flush: local.flush,
   };
+}
+
+// rrweb пересобирает документ через document.open(), который стирает обработчики окна iframe
+/** @param {() => any} getReplayer @param {Handlers} handlers */
+const createIframeHook = (getReplayer, handlers) => () => {
+  const win = getReplayer()?.iframe?.contentWindow;
+  for (const [type, fn] of Object.entries(win ? handlers : {})) win.addEventListener(type, fn, true);
+};
+
+/**
+ * @param {{ root: HTMLElement, handlers: Handlers, onFill: (id: number, value: string) => void, onBlur: () => void,
+ *   send: (msg: import("../../shared/protocol.js").ClientMessage) => void }} deps
+ */
+export function createPlayer({ root, handlers, onFill, onBlur, send }) {
+  let replayer = null;
+  const scrolling = createScrolling(() => replayer, send);
+  const mirror = () => replayer.getMirror();
+  const hookIframe = createIframeHook(() => replayer, { ...handlers, input: createFillWatcher(mirror, onFill) });
   const focus = createFocusMirror(() => replayer, hookIframe, onBlur);
   const syncValues = createValueSync(mirror, focus.apply);
 
@@ -46,7 +68,7 @@ export function createPlayer({ root, handlers, onFill, onBlur }) {
     reset() {
       root.innerHTML = "";
       replayer = new rrweb.Replayer([], { root, ...REPLAYER_OPTIONS });
-      smoothScrolling(replayer);
+      scrolling.attach(replayer);
       replayer.on("fullsnapshot-rebuilded", hookIframe);
       replayer.on("event-cast", syncValues);
       replayer.startLive(Date.now());
@@ -54,6 +76,8 @@ export function createPlayer({ root, handlers, onFill, onBlur }) {
     // время событий — по часам сервера; ставим свои, чтобы live-режим проигрывал сразу
     addEvent: (event) => replayer.addEvent({ ...event, timestamp: Date.now() }),
     setFocus: focus.set,
+    scrollLocally: scrolling.handle,
+    flushScroll: scrolling.flush,
   };
 }
 

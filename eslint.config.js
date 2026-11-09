@@ -21,4 +21,10 @@ export default [
   { files: ["src/agent/**", "public/**"], languageOptions: { globals: { ...globals.browser, rrweb: "readonly" } } },
   { files: ["shared/**"], languageOptions: { globals: globals["shared-node-browser"] } },
   { files: ["test/**"], rules: { "max-nested-callbacks": "off", "max-lines-per-function": "off" } },
+  // стенд замеров — вспомогательные сценарии, длинные по природе
+  {
+    files: ["bench/**"],
+    languageOptions: { globals: globals.node },
+    rules: { complexity: "off", "max-depth": "off", "max-nested-callbacks": "off", "max-lines-per-function": "off", "max-params": "off" },
+  },
 ];

@@ -1,7 +1,7 @@
 // @ts-check
 // Настоящий ввод через Input.*: события в странице доверенные. Время и паузы задаёт сам пользователь.
 import { buttonBit, heldButton, keyEventParams, mouseModifiers } from "./input.js";
-import { createSmoothWheel, isNotch } from "./smooth-wheel.js";
+import { createSmoothWheel, isNotch } from "../../shared/smooth-wheel.js";
 
 /** @typedef {import("../../shared/protocol.js").InputMessage} InputMessage */
 /** @typedef {import("../cdp/session.js").CdpSession} CdpSession */
@@ -20,24 +20,41 @@ const focusNodeExpression = (id) => `(() => {
 
 const CTRL = 2;
 
+/** @param {number} id @param {number} x @param {number} y */
+const scrollToExpression = (id, x, y) => `(() => {
+  const node = window.rrweb && window.rrweb.record.mirror.getNode(${id | 0});
+  const target = node && node.nodeType === Node.DOCUMENT_NODE ? node.defaultView : node;
+  if (target && target.scrollTo) target.scrollTo({ left: ${Number(x)}, top: ${Number(y)}, behavior: "instant" });
+})()`;
+
 /** @typedef {(type: string, extra: object) => Promise<unknown>} MouseDispatch */
 
-// Ctrl+колесо — масштаб страницы, его не анимируем. Шаги анимации идут мимо общей очереди ввода:
-// подтверждения колеса приходят по кадру, и очередь накапливала бы задержку.
+// Шаги колеса не ждут подтверждения: Chrome подтверждает колесо только на следующем кадре, и общая очередь
+// ввода копила бы задержку. Порядок с кликами сохраняется: команды уходят в Chrome по одному соединению.
+// raw — шаг уже разложен копией (она прокручивается сама), анимировать не нужно. Ctrl+колесо — масштаб.
 /** @param {MouseDispatch} dispatch */
 function createWheel(dispatch) {
   let modifiers = 0;
-  const smooth = createSmoothWheel((step) => dispatch("mouseWheel", { deltaX: step.dx, deltaY: step.dy, modifiers }));
-  const shouldAnimate = (msg) => !(mouseModifiers(msg) & CTRL) && (smooth.running || isNotch({ dx: msg.dx, dy: msg.dy }));
-  return (msg) => {
-    if (!shouldAnimate(msg)) return dispatch("mouseWheel", { deltaX: msg.dx, deltaY: msg.dy, modifiers: mouseModifiers(msg) });
+  const inflight = new Set();
+  const send = (dx, dy, mods) => {
+    const sent = dispatch("mouseWheel", { deltaX: dx, deltaY: dy, modifiers: mods }).catch(() => {});
+    inflight.add(sent);
+    sent.finally(() => inflight.delete(sent));
+  };
+  const smooth = createSmoothWheel((step) => send(step.dx, step.dy, modifiers));
+  const shouldAnimate = (msg) => !msg.raw && !(mouseModifiers(msg) & CTRL) && (smooth.running || isNotch({ dx: msg.dx, dy: msg.dy }));
+  const wheel = (msg) => {
+    if (!shouldAnimate(msg)) return send(msg.dx, msg.dy, mouseModifiers(msg));
     modifiers = mouseModifiers(msg);
     smooth.add({ dx: msg.dx, dy: msg.dy });
   };
+  /** Все отправленные шаги колеса Chrome уже применил. */
+  const settled = () => Promise.allSettled([...inflight]);
+  return { wheel, settled };
 }
 
-/** @param {CdpSession} session */
-function createMouse(session) {
+/** @param {CdpSession} session @param {World} world */
+function createMouse(session, world) {
   const state = { x: 0, y: 0, buttons: 0 };
   const dispatch = (type, extra) => session.send("Input.dispatchMouseEvent", {
     type, x: state.x, y: state.y, buttons: state.buttons, ...extra,
@@ -52,14 +69,23 @@ function createMouse(session) {
     state.buttons = toggle(state.buttons, buttonBit(msg.button));
     return dispatch(type, { button: msg.button, clickCount: msg.count, modifiers: mouseModifiers(msg) });
   };
-  const wheel = createWheel(dispatch);
+  const { wheel, settled } = createWheel(dispatch);
   return {
     move: moveTo,
     down: button("mousePressed", (buttons, bit) => buttons | bit),
     up: button("mouseReleased", (buttons, bit) => buttons & ~bit),
     wheel: (msg) => moveTo(msg).then(() => wheel(msg)),
+    scrollTo: createScrollTo(world, settled),
   };
 }
+
+// Позиция, которую видит копия (конец жеста или клик посреди прокрутки). Сначала дожидаемся, пока Chrome
+// применит отправленные шаги колеса, иначе они докрутят страницу сверх; клик идёт следом по той же очереди.
+/** @param {World} world @param {() => Promise<unknown>} settled */
+const createScrollTo = (world, settled) => async (msg) => {
+  await settled();
+  return world.evaluate(scrollToExpression(msg.id, msg.x, msg.y));
+};
 
 // Значение появилось в поле копии в обход клавиш (автозаполнение, IME): фокус ставим в мире агента,
 // а само значение вводим настоящим вводом, чтобы страница получила обычные события input.
@@ -82,7 +108,7 @@ export function createInputDispatcher({ session, world }) {
     return params && session.send("Input.dispatchKeyEvent", params);
   };
   const handlers = {
-    ...createMouse(session),
+    ...createMouse(session, world),
     keydown: key("keyDown"),
     keyup: key("keyUp"),
     text: (msg) => session.send("Input.insertText", { text: msg.text }),
