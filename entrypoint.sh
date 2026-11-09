@@ -43,4 +43,4 @@ for i in $(seq 1 50); do
   sleep 0.2
 done
 
-exec node /app/server.js
+exec node /app/src/main.js
