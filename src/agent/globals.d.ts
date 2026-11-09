@@ -1,4 +1,4 @@
 interface Window {
   rrweb?: any;
-  __mirrorDrain?: () => [string, string][] | null;
+  __mirrorDrain?: (timeoutMs: number) => [string, string][] | Promise<[string, string][]>;
 }

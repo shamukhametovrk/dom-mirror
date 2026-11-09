@@ -1,10 +1,12 @@
 // @ts-check
 // Изолированный мир: отдельный JS-контекст над теми же DOM-узлами, страница не видит ни rrweb, ни очереди.
 import { DRAIN_GLOBAL } from "../agent/channel.js";
-import { repeat } from "../util/async.js";
+import { sleep } from "../util/async.js";
 
 const WORLD_NAME = "mirror-world";
-const DRAIN_EXPRESSION = `window.${DRAIN_GLOBAL} ? window.${DRAIN_GLOBAL}() : null`;
+const LONG_POLL_MS = 2000;
+const RETRY_MS = 20;
+const DRAIN_EXPRESSION = `window.${DRAIN_GLOBAL} ? window.${DRAIN_GLOBAL}(${LONG_POLL_MS}) : null`;
 
 /** @typedef {import("./tab.js").Tab} Tab */
 /** @typedef {Awaited<ReturnType<typeof createWorld>>} World */
@@ -37,14 +39,18 @@ export async function createWorld({ tab, bus, source }) {
   return { evaluate };
 }
 
-/** @param {{ world: World, handlers: AgentHandlers, intervalMs?: number }} deps */
-export function startAgentChannel({ world, handlers, intervalMs = 20 }) {
+// Пока агента нет (страница грузится, контекст пересоздаётся), повторяем с короткой паузой.
+/** @param {{ world: World, handlers: AgentHandlers }} deps */
+export function startAgentChannel({ world, handlers }) {
   const dispatch = ([name, payload]) => {
     try { handlers[name]?.(payload); } catch (e) { console.error(name, e.message); }
   };
-  const drain = async () => {
+  const pollOnce = async () => {
     const items = await world.evaluate(DRAIN_EXPRESSION).catch(() => null);
     for (const item of items ?? []) dispatch(item);
+    return Array.isArray(items);
   };
-  repeat("drain", intervalMs, drain);
+  (async () => {
+    for (;;) if (!(await pollOnce())) await sleep(RETRY_MS);
+  })();
 }

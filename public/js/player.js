@@ -45,14 +45,23 @@ export function createPlayer({ root, handlers, onFill, onBlur }) {
     reset() {
       root.innerHTML = "";
       replayer = new rrweb.Replayer([], { root, ...REPLAYER_OPTIONS });
+      scrollWithoutAnimation(replayer);
       replayer.on("fullsnapshot-rebuilded", hookIframe);
       replayer.on("event-cast", syncValues);
-      replayer.startLive(Date.now() - 100);
+      replayer.startLive(Date.now());
     },
     // время событий — по часам сервера; ставим свои, чтобы live-режим проигрывал сразу
     addEvent: (event) => replayer.addEvent({ ...event, timestamp: Date.now() }),
     setFocus: focus.set,
   };
+}
+
+// Серверный Chrome уже анимирует прокрутку, а копия получает каждый её шаг. Плавная прокрутка rrweb
+// поверх этого перезапускалась на каждом шаге, и копия отставала на сотни миллисекунд.
+/** @param {any} replayer */
+function scrollWithoutAnimation(replayer) {
+  const applyScroll = replayer.applyScroll.bind(replayer);
+  replayer.applyScroll = (data) => applyScroll(data, true);
 }
 
 /** @param {any} replayer @param {number | null} id */

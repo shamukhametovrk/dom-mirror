@@ -5,8 +5,9 @@ const RECORD_OPTIONS = {
   inlineStylesheet: true,
   recordCanvas: false,
   slimDOMOptions: "all",
-  // мышь без накопления — плееру нужен :hover; input "all" — значение поля на каждое нажатие
-  sampling: { mousemove: 30, mousemoveCallback: 30, mouseInteraction: false, scroll: 100, input: "all" },
+  // мышь без накопления — плееру нужен :hover; прокрутка — каждый кадр серверной анимации;
+  // input "all" — значение поля на каждое нажатие
+  sampling: { mousemove: 30, mousemoveCallback: 30, mouseInteraction: false, scroll: 16, input: "all" },
 };
 
 function record() {
