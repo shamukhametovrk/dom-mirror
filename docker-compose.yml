@@ -1,17 +1,22 @@
 services:
   dom-mirror:
     build: .
+    image: dom-mirror:local
     restart: unless-stopped
-    shm_size: 1gb
+    init: true                 # подбирает завершившиеся процессы Chrome
+    shm_size: 1gb              # Chrome держит общую память в /dev/shm
     environment:
+      PASSWORD: ${PASSWORD:-}  # пусто — пароль сгенерируется при первом запуске и попадёт в лог
       START_URL: ${START_URL:-https://ru.wikipedia.org/}
-      TZ: ${TZ:-Europe/Moscow}   # должен совпадать с местоположением IP сервера
+      TZ: ${TZ:-Europe/Moscow}
       ACCEPT_LANGUAGES: ${ACCEPT_LANGUAGES:-ru-RU,ru,en-US,en}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
       FRAMES: ${FRAMES:-1}
+      DEBUG: ${DEBUG:-0}
     ports:
-      - "${HTTP_PORT:-8095}:8080"
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8095}:8080"
     volumes:
-      - chrome-profile:/data   # профиль Chrome: входы в аккаунты переживают пересоздание контейнера
+      - chrome-profile:/data   # профиль Chrome и пароль: переживают пересоздание контейнера
 
 volumes:
   chrome-profile:

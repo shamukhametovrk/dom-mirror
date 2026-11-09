@@ -3,6 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { diffFrame } from "../src/browser/frame-capture.js";
 import { createHub } from "../src/mirror/hub.js";
+import { createRewriter } from "../src/resources/rewrite.js";
+
+const rewriter = createRewriter((href) => "/r?u=" + encodeURIComponent(href));
 
 const rect = { id: 1, x: 0, y: 0, w: 50, h: 50 };
 
@@ -32,7 +35,7 @@ const fakeClient = () => {
 
 test("hub: новый клиент получает состояние, Meta начинает страницу заново", () => {
   const { calls, frames } = fakeFrames();
-  const hub = createHub({ startUrl: "https://a.test/", currentUrl: () => "https://a.test/now", frames });
+  const hub = createHub({ startUrl: "https://a.test/", currentUrl: () => "https://a.test/now", frames, rewriter });
   hub.recordEvent({ type: 3, data: { source: 0, adds: [] } });
   hub.recordEvent({ type: 4, data: { href: "https://b.test/" } });
   hub.recordEvent({ type: 2, data: { node: { type: 2, tagName: "img", attributes: { src: "i.png" }, childNodes: [] } } });
@@ -48,7 +51,7 @@ test("hub: новый клиент получает состояние, Meta н�
 });
 
 test("hub: рассылка только открытым клиентам, курсор через прокси", () => {
-  const hub = createHub({ startUrl: "https://a.test/", currentUrl: () => "", frames: fakeFrames().frames });
+  const hub = createHub({ startUrl: "https://a.test/", currentUrl: () => "", frames: fakeFrames().frames, rewriter });
   const open = fakeClient();
   const closed = fakeClient();
   hub.join(open.client);

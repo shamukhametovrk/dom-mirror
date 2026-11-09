@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>dom-mirror — вход</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f1f3f4; --card: #fff; --text: #202124; --muted: #5f6368; --accent: #1a73e8; --error: #d93025; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #202124; --card: #2d2e31; --text: #e8eaed; --muted: #9aa0a6; --accent: #8ab4f8; --error: #f28b82; } }
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    body { display: grid; place-items: center; padding: 16px; box-sizing: border-box; }
+    form { width: 100%; max-width: 320px; background: var(--card); border-radius: 12px; padding: 28px 24px; box-shadow: 0 1px 3px rgb(0 0 0 / .2); }
+    h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+    p { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+    input { width: 100%; box-sizing: border-box; height: 40px; padding: 0 12px; font-size: 15px; border: 1px solid var(--muted); border-radius: 8px; background: transparent; color: inherit; }
+    button { width: 100%; height: 40px; margin-top: 12px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 15px; cursor: pointer; }
+    #error { display: none; margin: 10px 0 0; color: var(--error); font-size: 14px; }
+    .failed #error { display: block; }
+  </style>
+</head>
+<body>
+  <form method="post" action="/login">
+    <h1>dom-mirror</h1>
+    <p>Введите пароль, чтобы открыть браузер.</p>
+    <input type="password" name="password" autocomplete="current-password" placeholder="Пароль" autofocus required />
+    <div id="error">Неверный пароль</div>
+    <button type="submit">Войти</button>
+  </form>
+  <script>if (new URLSearchParams(location.search).has("error")) document.body.classList.add("failed");</script>
+</body>
+</html>

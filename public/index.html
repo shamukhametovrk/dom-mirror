@@ -11,6 +11,7 @@
     #bar button { height: 28px; min-width: 32px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
     #url { flex: 1; height: 28px; border: 1px solid #ccc; border-radius: 14px; padding: 0 12px; font-size: 14px; }
     #status { font-size: 12px; color: #888; min-width: 70px; text-align: right; }
+    #logout { font-size: 12px; color: #5f6368; text-decoration: none; padding: 0 4px; }
     #stage { position: absolute; top: 40px; left: 0; right: 0; bottom: 0; overflow: hidden; }
     #player { position: absolute; inset: 0; }
     #player .replayer-wrapper { position: absolute; top: 0; left: 0; }
@@ -30,6 +31,7 @@
     <button id="reload" title="Обновить">⟳</button>
     <input id="url" spellcheck="false" />
     <span id="status">…</span>
+    <a id="logout" href="/logout" title="Выйти">Выйти</a>
   </div>
   <div id="stage">
     <div id="player"></div>

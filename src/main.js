@@ -16,16 +16,21 @@ import { createLoadTracker } from "./resources/tracker.js";
 import { acceptLanguage, createResourceResolver, fromChromeCache, viaChromeNetwork, viaNode } from "./resources/resolvers.js";
 import { createAgentHandlers, createHub } from "./mirror/hub.js";
 import { createCommandHandler } from "./mirror/commands.js";
-import { createRouter } from "./http/router.js";
-import { staticRoutes } from "./http/static.js";
+import { createRewriter } from "./resources/rewrite.js";
+import { createUrlSigner, PROXY_PATH } from "./resources/signing.js";
+import { createRouter, reply } from "./http/router.js";
+import { serveFile, staticRoutes } from "./http/static.js";
 import { createProxyRoute } from "./http/proxy.js";
 import { debugRoutes } from "./http/debug.js";
-import { attachWebSocket } from "./http/ws.js";
+import { attachWebSocket, isSameOrigin } from "./http/ws.js";
+import { createAuth, guardRoutes } from "./http/auth.js";
+import { resolvePassword } from "./http/password.js";
 import { createActivity, createSerialQueue } from "./util/async.js";
 
 /** @typedef {import("./config.js").Config} Config */
 /** @typedef {Awaited<ReturnType<typeof startBrowser>>} Browser */
 /** @typedef {ReturnType<typeof startMirror>} Mirror */
+/** @typedef {import("./http/auth.js").Auth} Auth */
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const RRWEB_DIR = path.join(ROOT, "node_modules/rrweb/dist");
@@ -48,14 +53,16 @@ function startMirror(config, { tab, world }, bus) {
   const serial = createSerialQueue();
   const activity = createActivity();
   const frames = createFrameCapture({ session: tab.session, serial, activity, settleMs: config.settleMs });
-  const hub = createHub({ startUrl: config.startUrl, currentUrl: () => tab.url, frames });
+  const signer = createUrlSigner();
+  const rewriter = createRewriter(signer.sign);
+  const hub = createHub({ startUrl: config.startUrl, currentUrl: () => tab.url, frames, rewriter });
   const publishUrl = (url) => hub.broadcast({ type: "url", url });
   bus.on("document", publishUrl);
   bus.on("url", publishUrl);
   startAgentChannel({ world, handlers: createAgentHandlers({ hub, frames }) });
   if (config.frames) startFrameCapture(frames, () => hub.size > 0, (list) => hub.broadcast({ type: "frames", frames: list }));
   const input = createInputDispatcher({ session: tab.session, world });
-  return { hub, onMessage: createCommandHandler({ tab, input, serial, activity }) };
+  return { hub, signer, rewriter, onMessage: createCommandHandler({ tab, input, serial, activity }) };
 }
 
 // User-Agent и Accept-Language запасного пути — как у самого Chrome, чтобы не расходились с navigator.
@@ -71,14 +78,27 @@ async function createResolver({ cdp, tab, tracker }, { hub }) {
   ]);
 }
 
-/** @param {Browser} browser @param {Mirror} mirror */
-async function createRoutes(browser, mirror) {
+// Без входа доступны только страница входа, проверка живости и подписанный прокси.
+/** @param {Browser} browser @param {Mirror} mirror @param {Auth} auth */
+async function createRoutes(browser, mirror, auth) {
   const stats = { chrome: 0, loaded: 0, fallback: 0 };
+  const loginPage = serveFile(path.join(ROOT, "public/login.html"), "text/html; charset=utf-8");
+  const debug = debugRoutes({ session: browser.tab.session, world: browser.world, stats: () => ({ ...stats, tracked: browser.tracker.size }) });
   return {
-    ...staticRoutes({ root: ROOT, rrwebDir: RRWEB_DIR }),
-    "/r": createProxyRoute({ resolve: await createResolver(browser, mirror), stats }),
-    ...debugRoutes({ session: browser.tab.session, world: browser.world, stats: () => ({ ...stats, tracked: browser.tracker.size }) }),
+    ...guardRoutes({ ...staticRoutes({ root: ROOT, rrwebDir: RRWEB_DIR }), ...debug }, auth),
+    "/login": (req, res, url) => (req.method === "POST" ? auth.login(req, res) : loginPage(req, res, url)),
+    "/logout": auth.logout,
+    "/health": (_req, res) => reply(res, 200, "ok"),
+    [PROXY_PATH]: createProxyRoute({ resolve: await createResolver(browser, mirror), stats, signer: mirror.signer, rewriter: mirror.rewriter }),
   };
+}
+
+/** @param {{ config: Config, mirror: Mirror, auth: Auth, routes: Record<string, import("./http/router.js").Route> }} deps */
+function startServer({ config, mirror, auth, routes }) {
+  const server = http.createServer(createRouter(routes));
+  const isAllowed = (req) => auth.isAuthorized(req) && isSameOrigin(req, config.trustProxy);
+  attachWebSocket({ server, hub: mirror.hub, onMessage: mirror.onMessage, isAllowed, debug: config.debug });
+  server.listen(config.port, () => console.log(`dom-mirror: http://localhost:${config.port}  (start: ${config.startUrl})`));
 }
 
 async function main() {
@@ -88,13 +108,13 @@ async function main() {
     console.error(reason);
     process.exit(1);
   });
+  const auth = createAuth({ password: resolvePassword(config), trustProxy: config.trustProxy });
   const browser = await startBrowser(config, bus);
   const mirror = startMirror(config, browser, bus);
-  const server = http.createServer(createRouter(await createRoutes(browser, mirror)));
+  const routes = await createRoutes(browser, mirror, auth);
   await redirectPopups(browser);
   browser.tab.navigate(config.startUrl).catch((e) => console.error("goto:", e.message));
-  attachWebSocket({ server, hub: mirror.hub, onMessage: mirror.onMessage });
-  server.listen(config.port, () => console.log(`dom-mirror: http://localhost:${config.port}  (start: ${config.startUrl})`));
+  startServer({ config, mirror, auth, routes });
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(0));

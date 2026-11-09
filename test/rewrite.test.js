@@ -1,10 +1,14 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { proxied, rewriteCss, rewriteEvent } from "../src/resources/rewrite.js";
+import { proxied as proxiedIn, rewriteCss as rewriteCssIn, rewriteEvent as rewriteEventIn } from "../src/resources/rewrite.js";
 
 const BASE = "https://site.test/dir/page.html";
 const p = (url) => "/r?u=" + encodeURIComponent(url);
+const ctx = (base) => ({ base, sign: p });
+const proxied = (url, base) => proxiedIn(url, ctx(base));
+const rewriteCss = (css, base) => rewriteCssIn(css, ctx(base));
+const rewriteEvent = (event, base) => rewriteEventIn(event, ctx(base));
 
 test("proxied: относительные и абсолютные http(s) адреса", () => {
   assert.equal(proxied("img/a.png", BASE), p("https://site.test/dir/img/a.png"));

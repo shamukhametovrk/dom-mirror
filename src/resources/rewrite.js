@@ -2,16 +2,19 @@
 // Ссылки на ресурсы в событиях rrweb ведут на прокси сервера: браузер пользователя не ходит на сайт сам.
 import { EventType, IncrementalSource, NodeType } from "../../shared/protocol.js";
 
+import { PROXY_PREFIX } from "./signing.js";
+
+/** @typedef {{ base: string, sign: (href: string) => string }} Context base — адрес страницы, sign — путь на прокси */
+
 const KEEP_SCHEMES = /^(data:|blob:|about:|javascript:|#)/i;
-const PROXY_PREFIX = "/r?u=";
 const LINK_TAGS = new Set(["link", "image", "use"]);
 const RESOURCE_EXT = /\.(css|ico|png|svg|woff2?)(\?|$)/i;
 
-/** @param {string} url @param {string} base */
-function toProxy(url, base) {
+/** @param {string} url @param {Context} ctx */
+function toProxy(url, ctx) {
   try {
-    const abs = new URL(url, base);
-    return /^https?:$/.test(abs.protocol) ? PROXY_PREFIX + encodeURIComponent(abs.href) : null;
+    const abs = new URL(url, ctx.base);
+    return /^https?:$/.test(abs.protocol) ? ctx.sign(abs.href) : null;
   } catch {
     return null;
   }
@@ -20,27 +23,27 @@ function toProxy(url, base) {
 /** @param {string} url */
 const isKept = (url) => !url || KEEP_SCHEMES.test(url) || url.startsWith(PROXY_PREFIX);
 
-/** @param {string} url @param {string} base */
-export function proxied(url, base) {
+/** @param {string} url @param {Context} ctx */
+export function proxied(url, ctx) {
   const trimmed = url?.trim();
-  return isKept(trimmed) ? url : toProxy(trimmed, base) ?? url;
+  return isKept(trimmed) ? url : toProxy(trimmed, ctx) ?? url;
 }
 
-/** @param {string} css @param {string} base */
-export const rewriteCss = (css, base) => css
-  .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (_, q, url) => `url(${q}${proxied(url, base)}${q})`)
-  .replace(/@import\s+(['"])([^'"]+)\1/gi, (_, q, url) => `@import ${q}${proxied(url, base)}${q}`);
+/** @param {string} css @param {Context} ctx */
+export const rewriteCss = (css, ctx) => css
+  .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (_, q, url) => `url(${q}${proxied(url, ctx)}${q})`)
+  .replace(/@import\s+(['"])([^'"]+)\1/gi, (_, q, url) => `@import ${q}${proxied(url, ctx)}${q}`);
 
-/** @param {string} srcset @param {string} base */
-const rewriteSrcset = (srcset, base) => srcset
+/** @param {string} srcset @param {Context} ctx */
+const rewriteSrcset = (srcset, ctx) => srcset
   .split(",")
   .map((part) => {
     const [url, ...descriptors] = part.trim().split(/\s+/);
-    return [proxied(url, base), ...descriptors].join(" ");
+    return [proxied(url, ctx), ...descriptors].join(" ");
   })
   .join(", ");
 
-/** @type {Record<string, (value: string, base: string) => string>} */
+/** @type {Record<string, (value: string, ctx: Context) => string>} */
 const BY_ATTRIBUTE = { src: proxied, poster: proxied, srcset: rewriteSrcset, style: rewriteCss, _cssText: rewriteCss };
 
 // У изменений атрибутов тег неизвестен (null) — тогда ресурс узнаём по расширению.
@@ -54,51 +57,61 @@ function attributeRewriter(key, value, tag) {
   return isResourceLink(key, value, tag) ? proxied : null;
 }
 
-/** @param {Record<string, unknown> | undefined} attrs @param {string | null} tag @param {string} base */
-function rewriteAttributes(attrs, tag, base) {
+/** @param {Record<string, unknown> | undefined} attrs @param {string | null} tag @param {Context} ctx */
+function rewriteAttributes(attrs, tag, ctx) {
   for (const [key, value] of Object.entries(attrs ?? {})) {
     const rewrite = typeof value === "string" && attributeRewriter(key, value, tag);
-    if (rewrite) attrs[key] = rewrite(value, base);
+    if (rewrite) attrs[key] = rewrite(value, ctx);
   }
 }
 
 const isStyleText = (node, parentTag) => node.type === NodeType.Text && (node.isStyle || parentTag === "style") && node.textContent;
 
-/** @param {any} node @param {string} base @param {string} [parentTag] */
-function rewriteNode(node, base, parentTag) {
+/** @param {any} node @param {Context} ctx @param {string} [parentTag] */
+function rewriteNode(node, ctx, parentTag) {
   if (!node) return;
-  if (node.type === NodeType.Element) rewriteAttributes(node.attributes, node.tagName, base);
-  if (isStyleText(node, parentTag)) node.textContent = rewriteCss(node.textContent, base);
-  rewriteChildren(node, base);
+  if (node.type === NodeType.Element) rewriteAttributes(node.attributes, node.tagName, ctx);
+  if (isStyleText(node, parentTag)) node.textContent = rewriteCss(node.textContent, ctx);
+  rewriteChildren(node, ctx);
 }
 
-/** @param {any} node @param {string} base */
-function rewriteChildren(node, base) {
-  for (const child of node.childNodes ?? []) rewriteNode(child, base, node.tagName);
+/** @param {any} node @param {Context} ctx */
+function rewriteChildren(node, ctx) {
+  for (const child of node.childNodes ?? []) rewriteNode(child, ctx, node.tagName);
 }
 
-/** @type {Record<number, (data: any, base: string) => void>} */
+/** @type {Record<number, (data: any, ctx: Context) => void>} */
 const BY_SOURCE = {
-  [IncrementalSource.Mutation]: (data, base) => {
-    for (const add of data.adds ?? []) rewriteNode(add.node, base);
-    for (const change of data.attributes ?? []) rewriteAttributes(change.attributes, null, base);
+  [IncrementalSource.Mutation]: (data, ctx) => {
+    for (const add of data.adds ?? []) rewriteNode(add.node, ctx);
+    for (const change of data.attributes ?? []) rewriteAttributes(change.attributes, null, ctx);
   },
-  [IncrementalSource.StyleSheetRule]: (data, base) => {
-    for (const add of data.adds ?? []) add.rule &&= rewriteCss(add.rule, base);
+  [IncrementalSource.StyleSheetRule]: (data, ctx) => {
+    for (const add of data.adds ?? []) add.rule &&= rewriteCss(add.rule, ctx);
   },
 };
 
-/** @type {Record<number, (data: any, base: string) => void>} */
+/** @type {Record<number, (data: any, ctx: Context) => void>} */
 const BY_EVENT_TYPE = {
-  [EventType.FullSnapshot]: (data, base) => rewriteNode(data.node, base),
-  [EventType.IncrementalSnapshot]: (data, base) => BY_SOURCE[data.source]?.(data, base),
+  [EventType.FullSnapshot]: (data, ctx) => rewriteNode(data.node, ctx),
+  [EventType.IncrementalSnapshot]: (data, ctx) => BY_SOURCE[data.source]?.(data, ctx),
 };
 
 /**
- * Мутирует событие rrweb на месте; base — адрес текущей страницы.
- * @template {{ type: number, data: any }} E @param {E} event @param {string} base @returns {E}
+ * Мутирует событие rrweb на месте.
+ * @template {{ type: number, data: any }} E @param {E} event @param {Context} ctx @returns {E}
  */
-export function rewriteEvent(event, base) {
-  BY_EVENT_TYPE[event.type]?.(event.data, base);
+export function rewriteEvent(event, ctx) {
+  BY_EVENT_TYPE[event.type]?.(event.data, ctx);
   return event;
 }
+
+/** @param {(href: string) => string} sign */
+export const createRewriter = (sign) => ({
+  /** @template {{ type: number, data: any }} E @param {E} event @param {string} base @returns {E} */
+  event: (event, base) => rewriteEvent(event, { base, sign }),
+  /** @param {string} css @param {string} base */
+  css: (css, base) => rewriteCss(css, { base, sign }),
+});
+
+/** @typedef {ReturnType<typeof createRewriter>} Rewriter */

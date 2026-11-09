@@ -12,6 +12,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends /tmp/chrome.deb \
  && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*
 
+# Всё, что меняется чаще пакетов, — ниже: тяжёлый слой с Chrome и шрифтами берётся из кэша.
+ENV DATA_DIR=/data
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
@@ -21,4 +23,6 @@ COPY src ./src
 COPY public ./public
 
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD curl -fs http://127.0.0.1:8080/health || exit 1
 CMD ["sh", "/app/entrypoint.sh"]

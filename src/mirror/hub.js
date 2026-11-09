@@ -1,7 +1,7 @@
 // @ts-check
 // Состояние копии и рассылка клиентам. Новому клиенту хватает событий с последнего Meta.
 import { EventType } from "../../shared/protocol.js";
-import { rewriteCss, rewriteEvent } from "../resources/rewrite.js";
+/** @typedef {import("../resources/rewrite.js").Rewriter} Rewriter */
 
 /** @typedef {import("../../shared/protocol.js").ServerMessage} ServerMessage */
 /** @typedef {import("../../shared/protocol.js").FocusState} FocusState */
@@ -35,8 +35,8 @@ const initialMessages = (state, url, frames) => [
   { type: "frames", frames: frames.snapshot() },
 ];
 
-/** @param {{ startUrl: string, currentUrl: () => string, frames: FrameCapture }} deps */
-export function createHub({ startUrl, currentUrl, frames }) {
+/** @param {{ startUrl: string, currentUrl: () => string, frames: FrameCapture, rewriter: Rewriter }} deps */
+export function createHub({ startUrl, currentUrl, frames, rewriter }) {
   const clients = createClientSet();
   /** @type {MirrorState} */
   const state = { base: startUrl, history: [], focus: { id: null } };
@@ -52,13 +52,13 @@ export function createHub({ startUrl, currentUrl, frames }) {
     /** @param {{ type: number, data: any }} event */
     recordEvent(event) {
       if (event.type === EventType.Meta) startPage(event.data.href);
-      state.history.push(rewriteEvent(event, state.base));
+      state.history.push(rewriter.event(event, state.base));
       clients.broadcast({ type: "events", events: [event] });
     },
     /** @param {FocusState} focus */
     setFocus: (focus) => clients.broadcast({ type: "focus", ...(state.focus = focus) }),
     /** @param {string} cursor */
-    setCursor: (cursor) => clients.broadcast({ type: "cursor", cursor: rewriteCss(cursor.slice(0, MAX_CURSOR_LENGTH), state.base) }),
+    setCursor: (cursor) => clients.broadcast({ type: "cursor", cursor: rewriter.css(cursor.slice(0, MAX_CURSOR_LENGTH), state.base) }),
     /** @param {Client} client */
     join(client) {
       clients.add(client);
