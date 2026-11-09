@@ -1,6 +1,7 @@
 // @ts-check
 // Воспроизведение копии. Ввод всегда уходит на сервер, а текст в полях приходит обратно от rrweb.
 import { EventType, IncrementalSource } from "../../shared/protocol.js";
+import { smoothScrolling } from "./scroll-smoother.js";
 
 /** @typedef {import("../../shared/protocol.js").FocusState} FocusState */
 /** @typedef {Record<string, (e: Event) => void>} Handlers */
@@ -45,7 +46,7 @@ export function createPlayer({ root, handlers, onFill, onBlur }) {
     reset() {
       root.innerHTML = "";
       replayer = new rrweb.Replayer([], { root, ...REPLAYER_OPTIONS });
-      scrollWithoutAnimation(replayer);
+      smoothScrolling(replayer);
       replayer.on("fullsnapshot-rebuilded", hookIframe);
       replayer.on("event-cast", syncValues);
       replayer.startLive(Date.now());
@@ -54,14 +55,6 @@ export function createPlayer({ root, handlers, onFill, onBlur }) {
     addEvent: (event) => replayer.addEvent({ ...event, timestamp: Date.now() }),
     setFocus: focus.set,
   };
-}
-
-// Серверный Chrome уже анимирует прокрутку, а копия получает каждый её шаг. Плавная прокрутка rrweb
-// поверх этого перезапускалась на каждом шаге, и копия отставала на сотни миллисекунд.
-/** @param {any} replayer */
-function scrollWithoutAnimation(replayer) {
-  const applyScroll = replayer.applyScroll.bind(replayer);
-  replayer.applyScroll = (data) => applyScroll(data, true);
 }
 
 /** @param {any} replayer @param {number | null} id */

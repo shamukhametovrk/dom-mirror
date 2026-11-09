@@ -1,6 +1,7 @@
 // @ts-check
 // Настоящий ввод через Input.*: события в странице доверенные. Время и паузы задаёт сам пользователь.
 import { buttonBit, heldButton, keyEventParams, mouseModifiers } from "./input.js";
+import { createSmoothWheel, isNotch } from "./smooth-wheel.js";
 
 /** @typedef {import("../../shared/protocol.js").InputMessage} InputMessage */
 /** @typedef {import("../cdp/session.js").CdpSession} CdpSession */
@@ -16,6 +17,24 @@ const focusNodeExpression = (id) => `(() => {
   if (el.select) el.select();
   return true;
 })()`;
+
+const CTRL = 2;
+
+/** @typedef {(type: string, extra: object) => Promise<unknown>} MouseDispatch */
+
+// Ctrl+колесо — масштаб страницы, его не анимируем. Шаги анимации идут мимо общей очереди ввода:
+// подтверждения колеса приходят по кадру, и очередь накапливала бы задержку.
+/** @param {MouseDispatch} dispatch */
+function createWheel(dispatch) {
+  let modifiers = 0;
+  const smooth = createSmoothWheel((step) => dispatch("mouseWheel", { deltaX: step.dx, deltaY: step.dy, modifiers }));
+  const shouldAnimate = (msg) => !(mouseModifiers(msg) & CTRL) && (smooth.running || isNotch({ dx: msg.dx, dy: msg.dy }));
+  return (msg) => {
+    if (!shouldAnimate(msg)) return dispatch("mouseWheel", { deltaX: msg.dx, deltaY: msg.dy, modifiers: mouseModifiers(msg) });
+    modifiers = mouseModifiers(msg);
+    smooth.add({ dx: msg.dx, dy: msg.dy });
+  };
+}
 
 /** @param {CdpSession} session */
 function createMouse(session) {
@@ -33,11 +52,12 @@ function createMouse(session) {
     state.buttons = toggle(state.buttons, buttonBit(msg.button));
     return dispatch(type, { button: msg.button, clickCount: msg.count, modifiers: mouseModifiers(msg) });
   };
+  const wheel = createWheel(dispatch);
   return {
     move: moveTo,
     down: button("mousePressed", (buttons, bit) => buttons | bit),
     up: button("mouseReleased", (buttons, bit) => buttons & ~bit),
-    wheel: (msg) => moveTo(msg).then(() => dispatch("mouseWheel", { deltaX: msg.dx, deltaY: msg.dy, modifiers: mouseModifiers(msg) })),
+    wheel: (msg) => moveTo(msg).then(() => wheel(msg)),
   };
 }
 
