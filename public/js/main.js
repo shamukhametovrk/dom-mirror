@@ -1,10 +1,13 @@
 // @ts-check
 import { createConnection } from "./connection.js";
+import { createClipboardSync } from "./clipboard.js";
+import { createDownloads } from "./downloads.js";
 import { createFrameLayer } from "./frames.js";
 import { createKeyboard } from "./keyboard.js";
 import { bindMouse } from "./mouse.js";
 import { createPlayer } from "./player.js";
 import { createTabStrip } from "./tabs.js";
+import { createToaster } from "./toasts.js";
 import { createToolbar } from "./toolbar.js";
 
 /** @typedef {import("../../shared/protocol.js").ClientMessage} ClientMessage */
@@ -36,6 +39,9 @@ const sendViewport = () => {
 
 const showTabs = createTabStrip(document.getElementById("tabs"), send, () => overlay.focus());
 const replaced = document.getElementById("replaced");
+const toast = createToaster(document.getElementById("toasts"));
+const showDownload = createDownloads(toast);
+const copyToClipboard = createClipboardSync(toast);
 
 const MESSAGE_HANDLERS = {
   url: (msg) => toolbar.setUrl(msg.url),
@@ -44,6 +50,8 @@ const MESSAGE_HANDLERS = {
   cursor: (msg) => { overlay.style.cursor = msg.cursor; },
   frames: (msg) => showFrames(msg.frames),
   tabs: (msg) => showTabs(msg.tabs),
+  download: (msg) => showDownload(msg),
+  clipboard: (msg) => copyToClipboard(msg),
 };
 
 const connection = createConnection({

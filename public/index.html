@@ -34,6 +34,11 @@
     #replaced { position: fixed; inset: 0; display: none; place-items: center; background: rgb(255 255 255 / .92); z-index: 10; text-align: center; }
     #replaced.shown { display: grid; }
     #replaced p { margin: 0 0 14px; font-size: 16px; color: #3c4043; }
+    #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 5; max-width: calc(100% - 32px); }
+    .toast { background: #323232; color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 2px 8px rgb(0 0 0 / .3); overflow-wrap: anywhere; }
+    .toast.failed { background: #b3261e; }
+    .toast a { color: #8ab4f8; margin-left: 10px; }
+    .toast.clickable { cursor: pointer; text-decoration: underline; }
     #replaced button { height: 36px; padding: 0 18px; border: 0; border-radius: 8px; background: #1a73e8; color: #fff; font-size: 14px; cursor: pointer; }
   </style>
 </head>
@@ -52,6 +57,7 @@
     <div id="frames"></div>
     <div id="overlay" tabindex="0"></div>
   </div>
+  <div id="toasts"></div>
   <div id="replaced">
     <div>
       <p>Браузер открыт на другом устройстве</p>

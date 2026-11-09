@@ -9,12 +9,15 @@ mkdir -p "$PROFILE/Default"
 # профиль лежит в volume и переживает пересоздание контейнера; снимаем lock-файлы прошлого запуска
 rm -f "$PROFILE"/SingletonLock "$PROFILE"/SingletonSocket "$PROFILE"/SingletonCookie
 
-# Языки браузера (navigator.languages и заголовок Accept-Language) хранятся в профиле и не меняются
-# флагом --lang, поэтому выставляем их в Preferences перед запуском Chrome.
+# Настройки профиля, которые не задать флагами, — в Preferences перед запуском Chrome:
+# языки (navigator.languages и Accept-Language) и PDF — скачивать, а не открывать во встроенном просмотрщике,
+# который в копию не переносится.
 LANGS="${ACCEPT_LANGUAGES:-ru-RU,ru,en-US,en}" PREFS="$PROFILE/Default/Preferences" node --input-type=commonjs -e '
 const fs = require("fs"), p = process.env.PREFS;
 let j = {}; try { j = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
 (j.intl ??= {}).accept_languages = j.intl.selected_languages = process.env.LANGS;
+(j.plugins ??= {}).always_open_pdf_externally = true;
+(j.download ??= {}).prompt_for_download = false;
 fs.writeFileSync(p, JSON.stringify(j));'
 
 # после падения или перезапуска контейнера файловая система та же: старая блокировка экрана не даёт Xvfb стартовать,

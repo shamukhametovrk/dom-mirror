@@ -45,6 +45,11 @@ function createScrolling(getReplayer, send) {
   };
 }
 
+// Редактор в копии с фокусом можно было бы править локально (IME, перетаскивание) — DOM копии разошёлся бы с сервером.
+// Обычные поля не трогаем: ввод с экранной клавиатуры телефона идёт через их локальное изменение (createFillWatcher).
+/** @param {Event} e */
+const keepEditorsReadOnly = (e) => /** @type {HTMLElement} */ (e.target)?.isContentEditable && e.preventDefault();
+
 // rrweb пересобирает документ через document.open(), который стирает обработчики окна iframe
 /** @param {() => any} getReplayer @param {Handlers} handlers */
 const createIframeHook = (getReplayer, handlers) => () => {
@@ -60,7 +65,9 @@ export function createPlayer({ root, handlers, onFill, onBlur, send }) {
   let replayer = null;
   const scrolling = createScrolling(() => replayer, send);
   const mirror = () => replayer.getMirror();
-  const hookIframe = createIframeHook(() => replayer, { ...handlers, input: createFillWatcher(mirror, onFill) });
+  const hookIframe = createIframeHook(() => replayer, {
+    ...handlers, input: createFillWatcher(mirror, onFill), beforeinput: keepEditorsReadOnly, drop: keepEditorsReadOnly,
+  });
   const focus = createFocusMirror(() => replayer, hookIframe, onBlur);
   const syncValues = createValueSync(mirror, focus.apply);
 
@@ -81,13 +88,36 @@ export function createPlayer({ root, handlers, onFill, onBlur, send }) {
   };
 }
 
-/** @param {any} replayer @param {number | null} id */
-function textFieldById(replayer, id) {
-  const el = id ? replayer.getMirror().getNode(id) : null;
-  return isTextField(el) ? el : null;
+// Редактор (contenteditable): фокус и выделение по нумерации rrweb — тогда браузер рисует каретку там же, где на сервере.
+/** @param {Document} doc @param {any} mirror @param {NonNullable<FocusState["editable"]>} sel */
+function selectRange(doc, mirror, sel) {
+  const anchor = mirror.getNode(sel.anchorId);
+  const head = mirror.getNode(sel.focusId);
+  try {
+    if (anchor && head) doc.getSelection().setBaseAndExtent(anchor, sel.anchorOffset, head, sel.focusOffset);
+  } catch { /* узел есть, но смещение в копии вне его — оставляем как есть */ }
 }
 
-// Поле в фокусе на сервере фокусируем и в копии, вместе с кареткой.
+/** @param {any} mirror @param {HTMLElement} el @param {FocusState} focus */
+function focusEditable(mirror, el, focus) {
+  if (el.ownerDocument.activeElement !== el) el.focus({ preventScroll: true });
+  if (focus.editable) selectRange(el.ownerDocument, mirror, focus.editable);
+}
+
+/** @param {any} el @returns {"field" | "editable" | null} */
+const focusKind = (el) => (isTextField(el) ? "field" : el?.isContentEditable ? "editable" : null);
+
+/** @param {any} replayer @param {FocusState} focus @returns {boolean} фокус поставлен */
+function placeCaret(replayer, focus) {
+  const mirror = replayer.getMirror();
+  const el = focus.id ? mirror.getNode(focus.id) : null;
+  const kind = focusKind(el);
+  if (kind === "field") focusField(el, focus);
+  if (kind === "editable") focusEditable(mirror, el, focus);
+  return kind !== null;
+}
+
+// Поле или редактор в фокусе на сервере фокусируем и в копии, вместе с кареткой.
 /** @param {() => any} getReplayer @param {() => void} hookIframe @param {() => void} onBlur */
 function createFocusMirror(getReplayer, hookIframe, onBlur) {
   /** @type {FocusState} */
@@ -96,9 +126,7 @@ function createFocusMirror(getReplayer, hookIframe, onBlur) {
     const doc = getReplayer()?.iframe?.contentDocument;
     if (!doc) return;
     hookIframe();
-    const el = textFieldById(getReplayer(), focus.id);
-    if (el) focusField(el, focus);
-    else blurCopy(doc, onBlur);
+    if (!placeCaret(getReplayer(), focus)) blurCopy(doc, onBlur);
   };
   return {
     apply,

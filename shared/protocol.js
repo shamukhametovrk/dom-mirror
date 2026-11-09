@@ -20,14 +20,17 @@
 /** @typedef {ViewportMessage | GotoMessage | HistoryMessage | TabMessage} NavigationMessage */
 /** @typedef {InputMessage | NavigationMessage} ClientMessage */
 
-/** @typedef {{ id: number | null, start?: number | null, end?: number | null }} FocusState */
+/** @typedef {{ anchorId: number, anchorOffset: number, focusId: number, focusOffset: number }} EditableSelection */
+/** @typedef {{ id: number | null, start?: number | null, end?: number | null, editable?: EditableSelection | null }} FocusState editable — каретка в contenteditable */
 /** @typedef {{ id: number, x: number, y: number, w: number, h: number }} FrameRect */
 /** @typedef {FrameRect & { img?: string }} FrameUpdate */
 /** @typedef {{ id: string, title: string, url: string, active: boolean }} TabInfo */
+/** @typedef {{ id: string, name: string, state: "started" | "done" | "failed" }} DownloadInfo */
 /**
  * @typedef {{ type: "url", url: string } | { type: "events", events: object[] } | ({ type: "focus" } & FocusState)
  *   | { type: "cursor", cursor: string } | { type: "frames", frames: FrameUpdate[] }
- *   | { type: "tabs", tabs: TabInfo[] } | { type: "replaced" }} ServerMessage
+ *   | { type: "tabs", tabs: TabInfo[] } | { type: "replaced" } | ({ type: "download" } & DownloadInfo)
+ *   | { type: "clipboard", text?: string, image?: string }} ServerMessage
  */
 
 export const EventType = Object.freeze({ FullSnapshot: 2, IncrementalSnapshot: 3, Meta: 4 });

@@ -10,6 +10,8 @@ import { createTabs } from "./browser/tabs.js";
 import { createActiveTab } from "./browser/active-tab.js";
 import { buildAgentSource } from "./browser/agent-source.js";
 import { createFrameCapture, startFrameCapture } from "./browser/frame-capture.js";
+import { startDownloads } from "./browser/downloads.js";
+import { createClipboardWatcher, mayCopy } from "./browser/clipboard.js";
 import { acceptLanguage, createResourceResolver, fromChromeCache, viaChromeNetwork, viaNode } from "./resources/resolvers.js";
 import { createAgentHandlers, createHub } from "./mirror/hub.js";
 import { createCommandHandler } from "./mirror/commands.js";
@@ -19,6 +21,7 @@ import { createRouter, reply } from "./http/router.js";
 import { serveFile, staticRoutes } from "./http/static.js";
 import { createProxyRoute } from "./http/proxy.js";
 import { debugRoutes } from "./http/debug.js";
+import { createDownloadRoute } from "./http/download.js";
 import { attachWebSocket, isSameOrigin } from "./http/ws.js";
 import { createAuth, guardRoutes } from "./http/auth.js";
 import { resolvePassword } from "./http/password.js";
@@ -56,8 +59,18 @@ function startMirror(config, { cdp, source }) {
   tabs.events.on("url", (url) => hub.broadcast({ type: "url", url }));
   tabs.events.on("changed", (list) => hub.broadcast({ type: "tabs", tabs: list }));
   if (config.frames) startFrameCapture(frames, () => hub.size > 0, (list) => hub.broadcast({ type: "frames", frames: list }));
-  const onMessage = createCommandHandler({ tab: active.tab, tabs, input: active.input, serial, activity });
-  return { hub, signer, rewriter, tabs, active, onMessage };
+  return { hub, signer, rewriter, tabs, active, onMessage: withClipboard(hub, createCommandHandler({ tab: active.tab, tabs, input: active.input, serial, activity })) };
+}
+
+/** После действий, которые могут что-то скопировать, буфер сервера сверяется и уходит клиенту. */
+/** @param {import("./mirror/hub.js").Hub} hub @param {(msg: any) => void} command */
+function withClipboard(hub, command) {
+  const clipboard = createClipboardWatcher({ publish: (content) => hub.broadcast({ type: "clipboard", ...content }) });
+  clipboard.prime();
+  return (msg) => {
+    command(msg);
+    if (mayCopy(msg)) clipboard.afterInput();
+  };
 }
 
 // User-Agent и Accept-Language запасного пути — как у самого Chrome, чтобы не расходились с navigator.
@@ -74,14 +87,14 @@ async function createResolver({ cdp }, { hub, active }) {
 }
 
 // Без входа доступны только страница входа, проверка живости и подписанный прокси.
-/** @param {Browser} browser @param {Mirror} mirror @param {Auth} auth */
-async function createRoutes(browser, mirror, auth) {
+/** @param {Browser} browser @param {Mirror} mirror @param {{ auth: Auth, downloads: import("./browser/downloads.js").Downloads }} access */
+async function createRoutes(browser, mirror, { auth, downloads }) {
   const stats = { chrome: 0, loaded: 0, fallback: 0 };
   const loginPage = serveFile(path.join(ROOT, "public/login.html"), "text/html; charset=utf-8");
   const { active } = mirror;
   const debug = debugRoutes({ session: active.session, world: active.world, stats: () => ({ ...stats, tracked: active.tracker.size }) });
   return {
-    ...guardRoutes({ ...staticRoutes({ root: ROOT, rrwebDir: RRWEB_DIR }), ...debug }, auth),
+    ...guardRoutes({ ...staticRoutes({ root: ROOT, rrwebDir: RRWEB_DIR }), ...debug, "/download": createDownloadRoute(downloads) }, auth),
     "/login": (req, res, url) => (req.method === "POST" ? auth.login(req, res) : loginPage(req, res, url)),
     "/logout": auth.logout,
     "/health": (_req, res) => reply(res, 200, "ok"),
@@ -109,7 +122,10 @@ async function main() {
   const mirror = startMirror(config, browser);
   await mirror.tabs.init();
   if (mirror.active.tab.url === "about:blank") mirror.active.tab.navigate(config.startUrl).catch((e) => console.error("goto:", e.message));
-  const routes = await createRoutes(browser, mirror, auth);
+  const downloads = await startDownloads({
+    cdp: browser.cdp, dir: config.downloadsDir, onEvent: (event) => mirror.hub.broadcast({ type: "download", ...event }),
+  });
+  const routes = await createRoutes(browser, mirror, { auth, downloads });
   startServer({ config, mirror, auth, routes });
 }
 

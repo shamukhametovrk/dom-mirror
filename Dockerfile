@@ -6,7 +6,7 @@ ENV NODE_ENV=production
 
 # Пакеты и Chrome — отдельными слоями: если скачивание Chrome сорвётся, пакеты при повторе возьмутся из кэша.
 RUN apt-get -o Acquire::Retries=5 update \
- && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates curl xvfb \
+ && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates curl xvfb xclip \
     fonts-noto fonts-noto-cjk fonts-noto-color-emoji fonts-liberation
 
 # Без таймаутов застрявшее соединение (на некоторых облаках бывает) вешает сборку навсегда: если 30 секунд

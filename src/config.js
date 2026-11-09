@@ -23,6 +23,7 @@ export function loadConfig(env = process.env) {
     settleMs: toInt(env.SETTLE_MS, 80),
     password: orDefault(env.PASSWORD, ""),
     passwordFile: orDefault(env.PASSWORD_FILE, path.join(orDefault(env.DATA_DIR, ".data"), "password")),
+    downloadsDir: path.join(orDefault(env.DATA_DIR, ".data"), "downloads"),
     trustProxy: isOn(env.TRUST_PROXY),
     debug: isOn(env.DEBUG),
   });
