@@ -12,10 +12,12 @@ const DRAIN_EXPRESSION = `window.${DRAIN_GLOBAL} ? window.${DRAIN_GLOBAL}(${LONG
 /** @typedef {Awaited<ReturnType<typeof createWorld>>} World */
 /** @typedef {Record<string, (payload: string) => void>} AgentHandlers */
 
-/** @param {{ tab: Tab, bus: import("node:events").EventEmitter, source: string }} deps */
-export async function createWorld({ tab, bus, source }) {
+// Агент попадает в каждый новый документ вкладки сам; в уже открытый (вкладка, которую открыл сайт,
+// или страница, загруженная до подключения) — внедряем один раз вручную.
+/** @param {{ tab: Tab, source: string }} deps */
+export async function createWorld({ tab, source }) {
   let contextId = null;
-  bus.on("document", () => { contextId = null; });
+  tab.events.on("document", () => { contextId = null; });
   await tab.session.send("Page.addScriptToEvaluateOnNewDocument", { source, worldName: WORLD_NAME });
 
   const resolveContext = async () => {
@@ -36,21 +38,24 @@ export async function createWorld({ tab, bus, source }) {
     if (exceptionDetails) throw new Error(exceptionDetails.exception?.description || exceptionDetails.text);
     return result.value;
   }
+  await evaluate(`window.${DRAIN_GLOBAL} ? 0 : (() => {\n${source}\n})()`).catch(() => {});
   return { evaluate };
 }
 
 // Пока агента нет (страница грузится, контекст пересоздаётся), повторяем с короткой паузой.
 /** @param {{ world: World, handlers: AgentHandlers }} deps */
 export function startAgentChannel({ world, handlers }) {
+  let running = true;
   const dispatch = ([name, payload]) => {
     try { handlers[name]?.(payload); } catch (e) { console.error(name, e.message); }
   };
   const pollOnce = async () => {
     const items = await world.evaluate(DRAIN_EXPRESSION).catch(() => null);
-    for (const item of items ?? []) dispatch(item);
+    for (const item of running ? items ?? [] : []) dispatch(item);
     return Array.isArray(items);
   };
   (async () => {
-    for (;;) if (!(await pollOnce())) await sleep(RETRY_MS);
+    while (running) if (!(await pollOnce())) await sleep(RETRY_MS);
   })();
+  return { stop: () => { running = false; } };
 }

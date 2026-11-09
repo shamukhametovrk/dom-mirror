@@ -16,15 +16,18 @@
 /** @typedef {{ type: "viewport", w: number, h: number }} ViewportMessage */
 /** @typedef {{ type: "goto", url: string }} GotoMessage */
 /** @typedef {{ type: "back" | "forward" | "reload" }} HistoryMessage */
-/** @typedef {ViewportMessage | GotoMessage | HistoryMessage} NavigationMessage */
+/** @typedef {{ type: "tabNew" } | { type: "tabSwitch" | "tabClose", id: string }} TabMessage */
+/** @typedef {ViewportMessage | GotoMessage | HistoryMessage | TabMessage} NavigationMessage */
 /** @typedef {InputMessage | NavigationMessage} ClientMessage */
 
 /** @typedef {{ id: number | null, start?: number | null, end?: number | null }} FocusState */
 /** @typedef {{ id: number, x: number, y: number, w: number, h: number }} FrameRect */
 /** @typedef {FrameRect & { img?: string }} FrameUpdate */
+/** @typedef {{ id: string, title: string, url: string, active: boolean }} TabInfo */
 /**
  * @typedef {{ type: "url", url: string } | { type: "events", events: object[] } | ({ type: "focus" } & FocusState)
- *   | { type: "cursor", cursor: string } | { type: "frames", frames: FrameUpdate[] }} ServerMessage
+ *   | { type: "cursor", cursor: string } | { type: "frames", frames: FrameUpdate[] }
+ *   | { type: "tabs", tabs: TabInfo[] } | { type: "replaced" }} ServerMessage
  */
 
 export const EventType = Object.freeze({ FullSnapshot: 2, IncrementalSnapshot: 3, Meta: 4 });
@@ -66,6 +69,9 @@ const SCHEMAS = {
   back: {},
   forward: {},
   reload: {},
+  tabNew: {},
+  tabSwitch: { id: str },
+  tabClose: { id: str },
 };
 
 /** @param {any} msg @param {Record<string, Check>} schema */
@@ -90,5 +96,7 @@ export function parseClientMessage(raw) {
   return schema && matches(msg, schema) ? msg : null;
 }
 
+const NAVIGATION_TYPES = new Set(["viewport", "goto", "back", "forward", "reload", "tabNew", "tabSwitch", "tabClose"]);
+
 /** @param {ClientMessage} msg @returns {msg is NavigationMessage} */
-export const isNavigation = (msg) => ["viewport", "goto", "back", "forward", "reload"].includes(msg.type);
+export const isNavigation = (msg) => NAVIGATION_TYPES.has(msg.type);

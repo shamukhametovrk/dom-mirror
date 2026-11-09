@@ -5,18 +5,32 @@ import { EventType } from "../../shared/protocol.js";
 
 /** @typedef {import("../../shared/protocol.js").ServerMessage} ServerMessage */
 /** @typedef {import("../../shared/protocol.js").FocusState} FocusState */
+/** @typedef {import("../../shared/protocol.js").TabInfo} TabInfo */
 /** @typedef {import("../browser/frame-capture.js").FrameCapture} FrameCapture */
-/** @typedef {{ readyState: number, send: (data: string) => void }} Client */
+/** @typedef {{ readyState: number, send: (data: string) => void, close: (code?: number) => void }} Client */
 /** @typedef {{ base: string, history: object[], focus: FocusState }} MirrorState */
 
 const OPEN = 1;
 const MAX_CURSOR_LENGTH = 500;
+export const REPLACED_CLOSE_CODE = 4001;
 
+/** @param {Client} client */
+function evict(client) {
+  if (client.readyState === OPEN) client.send(JSON.stringify({ type: "replaced" }));
+  client.close(REPLACED_CLOSE_CODE);
+}
+
+// Одна сессия за раз: новое подключение вытесняет прежнее (оно увидит «открыто на другом устройстве»).
 function createClientSet() {
   /** @type {Set<Client>} */
   const clients = new Set();
   return {
-    add: (/** @type {Client} */ client) => clients.add(client),
+    /** @param {Client} client */
+    add(client) {
+      for (const old of clients) evict(old);
+      clients.clear();
+      clients.add(client);
+    },
     remove: (/** @type {Client} */ client) => clients.delete(client),
     get size() { return clients.size; },
     /** @param {ServerMessage} msg */
@@ -27,16 +41,17 @@ function createClientSet() {
   };
 }
 
-/** @param {MirrorState} state @param {string} url @param {FrameCapture} frames @returns {ServerMessage[]} */
-const initialMessages = (state, url, frames) => [
+/** @param {MirrorState} state @param {{ url: string, tabs: TabInfo[] }} now @param {FrameCapture} frames @returns {ServerMessage[]} */
+const initialMessages = (state, { url, tabs }, frames) => [
+  { type: "tabs", tabs },
   { type: "url", url },
   { type: "events", events: state.history },
   { type: "focus", ...state.focus },
   { type: "frames", frames: frames.snapshot() },
 ];
 
-/** @param {{ startUrl: string, currentUrl: () => string, frames: FrameCapture, rewriter: Rewriter }} deps */
-export function createHub({ startUrl, currentUrl, frames, rewriter }) {
+/** @param {{ startUrl: string, currentUrl: () => string, tabs: () => TabInfo[], frames: FrameCapture, rewriter: Rewriter }} deps */
+export function createHub({ startUrl, currentUrl, tabs, frames, rewriter }) {
   const clients = createClientSet();
   /** @type {MirrorState} */
   const state = { base: startUrl, history: [], focus: { id: null } };
@@ -62,7 +77,7 @@ export function createHub({ startUrl, currentUrl, frames, rewriter }) {
     /** @param {Client} client */
     join(client) {
       clients.add(client);
-      for (const msg of initialMessages(state, currentUrl(), frames)) client.send(JSON.stringify(msg));
+      for (const msg of initialMessages(state, { url: currentUrl(), tabs: tabs() }, frames)) client.send(JSON.stringify(msg));
     },
   };
 }

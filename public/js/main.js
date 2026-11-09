@@ -4,6 +4,7 @@ import { createFrameLayer } from "./frames.js";
 import { createKeyboard } from "./keyboard.js";
 import { bindMouse } from "./mouse.js";
 import { createPlayer } from "./player.js";
+import { createTabStrip } from "./tabs.js";
 import { createToolbar } from "./toolbar.js";
 
 /** @typedef {import("../../shared/protocol.js").ClientMessage} ClientMessage */
@@ -33,16 +34,21 @@ const sendViewport = () => {
   viewportTimer = window.setTimeout(() => send({ type: "viewport", w: stage.clientWidth, h: stage.clientHeight }), VIEWPORT_DEBOUNCE_MS);
 };
 
+const showTabs = createTabStrip(document.getElementById("tabs"), send, () => overlay.focus());
+const replaced = document.getElementById("replaced");
+
 const MESSAGE_HANDLERS = {
   url: (msg) => toolbar.setUrl(msg.url),
   events: (msg) => msg.events.forEach(player.addEvent),
   focus: (msg) => player.setFocus(msg),
   cursor: (msg) => { overlay.style.cursor = msg.cursor; },
   frames: (msg) => showFrames(msg.frames),
+  tabs: (msg) => showTabs(msg.tabs),
 };
 
 const connection = createConnection({
   onOpen: () => {
+    replaced.classList.remove("shown");
     toolbar.setStatus("онлайн");
     showFrames([]);
     player.reset();
@@ -50,8 +56,13 @@ const connection = createConnection({
     overlay.focus();
   },
   onClose: () => toolbar.setStatus("нет связи"),
+  onReplaced: () => {
+    toolbar.setStatus("на другом устройстве");
+    replaced.classList.add("shown");
+  },
   onMessage: (msg) => MESSAGE_HANDLERS[msg.type]?.(msg),
 });
+document.getElementById("take-over").addEventListener("click", () => connection.connect());
 
 // перед кликом докручиваем локальную прокрутку и отправляем её остаток — клик попадёт туда же, что и в копии
 const onPress = () => {

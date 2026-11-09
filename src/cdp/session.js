@@ -18,16 +18,8 @@ export function createSession(cdp, sessionId) {
   };
 }
 
-/** @param {CdpConnection} cdp */
-async function findOrCreatePage(cdp) {
-  const { targetInfos } = await cdp.send("Target.getTargets");
-  const page = targetInfos.find((t) => t.type === "page");
-  return page?.targetId ?? (await cdp.send("Target.createTarget", { url: "about:blank" })).targetId;
-}
-
-/** @param {CdpConnection} cdp @returns {Promise<{ targetId: string, session: CdpSession }>} */
-export async function attachToPage(cdp) {
-  const targetId = await findOrCreatePage(cdp);
+/** @param {CdpConnection} cdp @param {string} targetId @returns {Promise<CdpSession>} */
+export async function attachToTarget(cdp, targetId) {
   const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
-  return { targetId, session: createSession(cdp, sessionId) };
+  return createSession(cdp, sessionId);
 }

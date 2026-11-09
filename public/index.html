@@ -7,12 +7,21 @@
   <link rel="stylesheet" href="/rrweb.css" />
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; background: #fff; }
+    #tabs { height: 34px; display: flex; align-items: flex-end; gap: 2px; padding: 0 8px; background: #dee1e6; box-sizing: border-box; overflow: hidden; }
+    .tab { display: flex; align-items: center; gap: 6px; min-width: 60px; max-width: 220px; flex: 1 1 220px; height: 28px; padding: 0 6px 0 12px;
+      border-radius: 8px 8px 0 0; font-size: 12px; color: #3c4043; cursor: default; box-sizing: border-box; user-select: none; }
+    .tab:hover { background: #e8eaed; }
+    .tab.active { background: #f1f3f4; }
+    .tab .title { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .tab .close, #new-tab { border: 0; background: transparent; border-radius: 50%; width: 20px; height: 20px; line-height: 18px; padding: 0; cursor: pointer; color: #5f6368; font-size: 14px; }
+    .tab .close:hover, #new-tab:hover { background: #d3d6db; }
+    #new-tab { margin: 0 0 4px 4px; flex: none; font-size: 18px; }
     #bar { height: 40px; display: flex; gap: 6px; align-items: center; padding: 0 8px; background: #f1f3f4; border-bottom: 1px solid #ddd; box-sizing: border-box; }
     #bar button { height: 28px; min-width: 32px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
     #url { flex: 1; height: 28px; border: 1px solid #ccc; border-radius: 14px; padding: 0 12px; font-size: 14px; }
     #status { font-size: 12px; color: #888; min-width: 70px; text-align: right; }
     #logout { font-size: 12px; color: #5f6368; text-decoration: none; padding: 0 4px; }
-    #stage { position: absolute; top: 40px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+    #stage { position: absolute; top: 74px; left: 0; right: 0; bottom: 0; overflow: hidden; }
     #player { position: absolute; inset: 0; }
     #player .replayer-wrapper { position: absolute; top: 0; left: 0; }
     #player iframe { border: 0; }
@@ -22,9 +31,14 @@
     #frames img { position: absolute; display: block; visibility: hidden; }
     /* прозрачный слой поверх копии: ловит мышь и клавиатуру и отправляет на сервер */
     #overlay { position: absolute; inset: 0; outline: none; }
+    #replaced { position: fixed; inset: 0; display: none; place-items: center; background: rgb(255 255 255 / .92); z-index: 10; text-align: center; }
+    #replaced.shown { display: grid; }
+    #replaced p { margin: 0 0 14px; font-size: 16px; color: #3c4043; }
+    #replaced button { height: 36px; padding: 0 18px; border: 0; border-radius: 8px; background: #1a73e8; color: #fff; font-size: 14px; cursor: pointer; }
   </style>
 </head>
 <body>
+  <div id="tabs"><button id="new-tab" title="Новая вкладка">+</button></div>
   <div id="bar">
     <button id="back" title="Назад">←</button>
     <button id="forward" title="Вперёд">→</button>
@@ -37,6 +51,12 @@
     <div id="player"></div>
     <div id="frames"></div>
     <div id="overlay" tabindex="0"></div>
+  </div>
+  <div id="replaced">
+    <div>
+      <p>Браузер открыт на другом устройстве</p>
+      <button id="take-over">Открыть здесь</button>
+    </div>
   </div>
   <script src="/rrweb.js"></script>
   <script type="module" src="/js/main.js"></script>

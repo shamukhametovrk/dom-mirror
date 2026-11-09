@@ -28,7 +28,7 @@ async function readStream(session, handle) {
   return Buffer.concat(chunks);
 }
 
-/** @param {import("./tracker.js").LoadTracker} tracker @returns {Strategy} */
+/** @param {Pick<import("./tracker.js").LoadTracker, "lookup">} tracker @returns {Strategy} */
 export const fromChromeCache = (tracker) => ({ name: "chrome", load: tracker.lookup });
 
 // Chrome скачивает ресурс своим сетевым стеком, не выполняя код страницы. Строгий CSP сайта это запрещает.

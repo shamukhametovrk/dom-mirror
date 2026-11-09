@@ -1,16 +1,11 @@
 // @ts-check
-import { attachToPage } from "../cdp/session.js";
+// Одна вкладка Chrome: своя CDP-сессия, навигация и события document/url.
+import { EventEmitter } from "node:events";
+import { attachToTarget } from "../cdp/session.js";
 
 /** @typedef {import("../cdp/connection.js").CdpConnection} CdpConnection */
 /** @typedef {import("../cdp/session.js").CdpSession} CdpSession */
-/** @typedef {import("node:events").EventEmitter} Bus */
-/** @typedef {Awaited<ReturnType<typeof openTab>>} Tab */
-
-/** @param {CdpSession} session */
-async function currentUrl(session) {
-  const { entries, currentIndex } = await session.send("Page.getNavigationHistory");
-  return entries[currentIndex].url;
-}
+/** @typedef {Awaited<ReturnType<typeof createTab>>} Tab */
 
 /** @param {CdpSession} session @param {number} delta */
 async function stepHistory(session, delta) {
@@ -19,18 +14,18 @@ async function stepHistory(session, delta) {
   if (entry) await session.send("Page.navigateToHistoryEntry", { entryId: entry.id });
 }
 
-/** @param {CdpSession} session @param {{ frameId: string, url: string }} state @param {Bus} bus */
-function trackNavigation(session, state, bus) {
+/** @param {CdpSession} session @param {{ frameId: string, url: string }} state @param {EventEmitter} events */
+function trackNavigation(session, state, events) {
   session.on("Page.frameNavigated", ({ frame }) => {
     if (frame.parentId) return;
     state.frameId = frame.id;
     state.url = frame.url + (frame.urlFragment ?? "");
-    bus.emit("document", state.url);
+    events.emit("document", state.url);
   });
   session.on("Page.navigatedWithinDocument", ({ frameId, url }) => {
     if (frameId !== state.frameId) return;
     state.url = url;
-    bus.emit("url", url);
+    events.emit("url", url);
   });
 }
 
@@ -44,20 +39,21 @@ async function resizeWindow({ cdp, targetId, evaluate }, width, height) {
   await cdp.send("Browser.setWindowBounds", { windowId, bounds });
 }
 
-/** @param {{ cdp: CdpConnection, bus: Bus }} deps */
-export async function openTab({ cdp, bus }) {
-  const { targetId, session } = await attachToPage(cdp);
+/** @param {{ cdp: CdpConnection, targetId: string }} deps */
+export async function createTab({ cdp, targetId }) {
+  const session = await attachToTarget(cdp, targetId);
+  const events = new EventEmitter();
   await session.send("Page.enable");
-  const { frameTree } = await session.send("Page.getFrameTree");
-  const state = { frameId: frameTree.frame.id, url: await currentUrl(session) };
-  trackNavigation(session, state, bus);
-  cdp.on("Target.targetDestroyed", ({ targetId: id }) => id === targetId && bus.emit("fatal", "tab closed"));
+  const { frame } = (await session.send("Page.getFrameTree")).frameTree;
+  const state = { frameId: frame.id, url: frame.url + (frame.urlFragment ?? "") };
+  trackNavigation(session, state, events);
 
   /** @param {string} expression */
   const evaluate = async (expression) => (await session.send("Runtime.evaluate", { expression, returnByValue: true })).result.value;
   return {
     targetId,
     session,
+    events,
     evaluate,
     get frameId() { return state.frameId; },
     get url() { return state.url; },
