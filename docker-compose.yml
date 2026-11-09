@@ -1,0 +1,17 @@
+services:
+  dom-mirror:
+    build: .
+    restart: unless-stopped
+    shm_size: 1gb
+    environment:
+      START_URL: ${START_URL:-https://ru.wikipedia.org/}
+      TZ: ${TZ:-Europe/Moscow}   # должен совпадать с местоположением IP сервера
+      ACCEPT_LANGUAGES: ${ACCEPT_LANGUAGES:-ru-RU,ru,en-US,en}
+      FRAMES: ${FRAMES:-1}
+    ports:
+      - "${HTTP_PORT:-8095}:8080"
+    volumes:
+      - chrome-profile:/data   # профиль Chrome: входы в аккаунты переживают пересоздание контейнера
+
+volumes:
+  chrome-profile:

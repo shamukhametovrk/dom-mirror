@@ -1,0 +1,13 @@
+{
+  "name": "dom-mirror",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "rrweb": "2.2.1",
+    "ws": "8.22.2"
+  }
+}

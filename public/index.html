@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>dom-mirror</title>
+  <link rel="stylesheet" href="/rrweb.css" />
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; background: #fff; }
+    #bar { height: 40px; display: flex; gap: 6px; align-items: center; padding: 0 8px; background: #f1f3f4; border-bottom: 1px solid #ddd; box-sizing: border-box; }
+    #bar button { height: 28px; min-width: 32px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
+    #url { flex: 1; height: 28px; border: 1px solid #ccc; border-radius: 14px; padding: 0 12px; font-size: 14px; }
+    #status { font-size: 12px; color: #888; min-width: 70px; text-align: right; }
+    #stage { position: absolute; top: 40px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+    #player { position: absolute; inset: 0; }
+    #player .replayer-wrapper { position: absolute; top: 0; left: 0; }
+    #player iframe { border: 0; }
+    #player .replayer-mouse { display: none; }   /* курсор рисует сам браузер пользователя */
+    /* картинки iframe с чужих сайтов (виджеты проверки и т.п.): rrweb их содержимое не передаёт */
+    #frames { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    #frames img { position: absolute; display: block; visibility: hidden; }
+    /* прозрачный слой поверх копии: ловит мышь и клавиатуру и отправляет на сервер */
+    #overlay { position: absolute; inset: 0; outline: none; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <button id="back" title="Назад">←</button>
+    <button id="forward" title="Вперёд">→</button>
+    <button id="reload" title="Обновить">⟳</button>
+    <input id="url" spellcheck="false" />
+    <span id="status">…</span>
+  </div>
+  <div id="stage">
+    <div id="player"></div>
+    <div id="frames"></div>
+    <div id="overlay" tabindex="0"></div>
+  </div>
+  <script src="/rrweb.js"></script>
+  <script src="/client.js"></script>
+</body>
+</html>
