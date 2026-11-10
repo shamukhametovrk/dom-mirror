@@ -30,13 +30,22 @@ export function createActiveTab(tabs) {
   };
 }
 
-// Размер области клиента запоминаем: после переключения вкладки окно подгоняется под неё заново.
+/** @typedef {{ width: number, height: number, dark?: boolean }} ClientView */
+
+/** @param {import("./tab.js").Tab} tab @param {ClientView} view */
+async function applyView(tab, view) {
+  await tab.resize(view.width, view.height);
+  if (view.dark !== undefined) await tab.setColorScheme(view.dark);
+}
+
+// Размер и тему клиента запоминаем: после переключения вкладки окно и тема подгоняются заново.
+// Подгонки идут по одной: размер клиента и переключение вкладки могут прийти одновременно.
 /** @param {Tabs} tabs @param {() => import("./tabs.js").TabContext} ctx */
-// Подгонки окна идут по одной: размер клиента и переключение вкладки могут прийти одновременно.
 const tabDelegate = (tabs, ctx) => {
-  let size = null;
+  /** @type {ClientView | null} */
+  let view = null;
   const serial = createSerialQueue();
-  const fit = () => serial(async () => size && ctx().tab.resize(size.width, size.height));
+  const fit = () => serial(async () => view && applyView(ctx().tab, view));
   return {
     get url() { return tabs.active?.tab.url ?? ""; },
     get frameId() { return ctx().tab.frameId; },
@@ -44,8 +53,8 @@ const tabDelegate = (tabs, ctx) => {
     navigate: (/** @type {string} */ url) => ctx().tab.navigate(url),
     reload: () => ctx().tab.reload(),
     back: () => ctx().tab.back(),
-    resize: (/** @type {number} */ width, /** @type {number} */ height) => {
-      size = { width, height };
+    resize: (/** @type {ClientView} */ next) => {
+      view = next;
       return fit();
     },
     refit: fit,

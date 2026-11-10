@@ -26,7 +26,7 @@ const withPaths = (msg, paths) => (msg.type === "drop" ? { ...msg, files: paths(
  */
 export function createCommandHandler({ tab, tabs, input, serial, files }) {
   const immediate = {
-    viewport: (msg) => tab.resize(clampSide(msg.w, MAX_VIEWPORT.w), clampSide(msg.h, MAX_VIEWPORT.h)),
+    viewport: (msg) => tab.resize({ width: clampSide(msg.w, MAX_VIEWPORT.w), height: clampSide(msg.h, MAX_VIEWPORT.h), dark: msg.dark }),
     goto: (msg) => tab.navigate(normalizeUrl(msg.url)),
     back: () => tab.back(),
     reload: () => tab.reload(),

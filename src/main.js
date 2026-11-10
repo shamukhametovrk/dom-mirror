@@ -8,7 +8,7 @@ import { loadConfig } from "./config.js";
 import { connectCdp } from "./cdp/connection.js";
 import { createTabs } from "./browser/tabs.js";
 import { createActiveTab } from "./browser/active-tab.js";
-import { buildAgentSource } from "./browser/agent-source.js";
+import { buildAgentSource, patchRrweb } from "./browser/agent-source.js";
 import { createFileChoosers } from "./browser/file-chooser.js";
 import { createUploads } from "./browser/uploads.js";
 import { startDownloads } from "./browser/downloads.js";
@@ -41,7 +41,7 @@ const RRWEB_DIR = path.join(ROOT, "node_modules/rrweb/dist");
 async function startBrowser(config, bus) {
   const cdp = await connectCdp(config.cdpUrl);
   cdp.onClose(() => bus.emit("fatal", "chrome disconnected"));
-  const source = buildAgentSource(fs.readFileSync(path.join(RRWEB_DIR, "rrweb.umd.min.cjs"), "utf8"));
+  const source = buildAgentSource(patchRrweb(fs.readFileSync(path.join(RRWEB_DIR, "rrweb.umd.min.cjs"), "utf8")));
   return { cdp, source };
 }
 

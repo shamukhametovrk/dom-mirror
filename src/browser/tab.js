@@ -61,6 +61,10 @@ export async function createTab({ cdp, targetId }) {
     reload: () => session.send("Page.reload"),
     back: () => stepHistory(session, -1),
     resize: (/** @type {number} */ width, /** @type {number} */ height) => resizeWindow(cdp, targetId, { width, height }),
+    // тема как у браузера клиента: копия берёт prefers-color-scheme у него, страница на сервере должна совпадать
+    setColorScheme: (/** @type {boolean} */ dark) => session.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-color-scheme", value: dark ? "dark" : "light" }],
+    }),
     setFocused: (/** @type {boolean} */ enabled) => session.send("Emulation.setFocusEmulationEnabled", { enabled }).catch(() => {}),
   };
 }

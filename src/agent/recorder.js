@@ -1,5 +1,5 @@
 // @ts-check
-import { post } from "./channel.js";
+import { changeReporter, post } from "./channel.js";
 
 const RECORD_OPTIONS = {
   inlineStylesheet: true,
@@ -10,8 +10,15 @@ const RECORD_OPTIONS = {
   sampling: { mousemove: 30, mousemoveCallback: 30, mouseInteraction: false, scroll: 16, input: "all" },
 };
 
+// Ошибка внутри rrweb теряет всю пачку изменений DOM: сообщаем серверу, чтобы было видно в логе.
+const reportError = changeReporter("error");
+
 function record() {
-  window.rrweb.record({ emit: (event) => post("emit", JSON.stringify(event)), ...RECORD_OPTIONS });
+  const errorHandler = (/** @type {any} */ e) => {
+    reportError(String(e?.stack ?? e).slice(0, 2000));
+    return true;
+  };
+  window.rrweb.record({ emit: (event) => post("emit", JSON.stringify(event)), errorHandler, ...RECORD_OPTIONS });
 }
 
 /** @param {() => void} fn */

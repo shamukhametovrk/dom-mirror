@@ -14,7 +14,7 @@
 /** @typedef {{ type: "scrollTo", id: number, x: number, y: number }} ScrollToMessage */
 /** @typedef {Point & { type: "drop", files: string[] }} DropMessage files — id загрузок; сервер заменяет их путями */
 /** @typedef {MoveMessage | ButtonMessage | WheelMessage | KeyMessage | TextMessage | FillMessage | ScrollToMessage | DropMessage} InputMessage */
-/** @typedef {{ type: "viewport", w: number, h: number }} ViewportMessage */
+/** @typedef {{ type: "viewport", w: number, h: number, dark?: boolean }} ViewportMessage dark — тема браузера клиента */
 /** @typedef {{ type: "goto", url: string }} GotoMessage */
 /** @typedef {{ type: "back" | "reload" }} HistoryMessage */
 /** @typedef {{ type: "tabSwitch" | "tabClose", id: string }} TabMessage */
@@ -72,7 +72,7 @@ const SCHEMAS = {
   fill: { id: num, value: str },
   scrollTo: { id: num, x: num, y: num },
   drop: { ...POINT, files: fileIds },
-  viewport: { w: num, h: num },
+  viewport: { w: num, h: num, dark: optional(bool) },
   goto: { url: str },
   back: {},
   reload: {},

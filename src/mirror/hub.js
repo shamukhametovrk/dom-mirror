@@ -84,4 +84,5 @@ export const createAgentHandlers = (hub) => ({
   emit: (/** @type {string} */ raw) => hub.recordEvent(JSON.parse(raw)),
   focus: (/** @type {string} */ raw) => hub.setFocus(JSON.parse(raw)),
   cursor: (/** @type {string} */ cursor) => hub.setCursor(String(cursor)),
+  error: (/** @type {string} */ message) => console.error("agent:", String(message)),
 });

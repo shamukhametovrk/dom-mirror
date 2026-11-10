@@ -15,6 +15,17 @@ export const toScript = (code) => code
 
 const readModule = (name) => toScript(fs.readFileSync(fileURLToPath(new URL(name, AGENT_DIR)), "utf8"));
 
+// rrweb выбрасывает новый узел, если его соседа справа нет в своей таблице (id -1), и дальше теряет все узлы,
+// вставленные перед ним, — так в ChatGPT пропадали сообщения. Такого соседа нет и в копии, поэтому верно
+// поступить как с исключённым (id -2): вставить перед следующим известным. Правка — в минифицированном rrweb 2.2.1.
+const NEXT_ID_LOOP = /for\(;(\w+)===-2;\)(\w+)=\2&&(\w+)\.nextSibling\(\2\),\1=\2&&this\.mirror\.getId\(\2\);/;
+
+/** @param {string} rrwebSource */
+export function patchRrweb(rrwebSource) {
+  if (!NEXT_ID_LOOP.test(rrwebSource)) throw new Error("rrweb: не найдено место для правки (сменилась версия?)");
+  return rrwebSource.replace(NEXT_ID_LOOP, (loop, id) => loop.replace(`${id}===-2;`, `(${id}===-2||${id}===-1);`));
+}
+
 /** @param {string} rrwebSource */
 export function buildAgentSource(rrwebSource) {
   const modules = MODULES.map(readModule).join("\n");

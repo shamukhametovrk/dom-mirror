@@ -32,10 +32,12 @@ const player = createPlayer({
   send,
 });
 
+// тема браузера: копия берёт prefers-color-scheme отсюда, поэтому страница на сервере включает такую же
+const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 let viewportTimer = 0;
 const sendViewport = () => {
   clearTimeout(viewportTimer);
-  viewportTimer = window.setTimeout(() => send({ type: "viewport", w: stage.clientWidth, h: stage.clientHeight }), VIEWPORT_DEBOUNCE_MS);
+  viewportTimer = window.setTimeout(() => send({ type: "viewport", w: stage.clientWidth, h: stage.clientHeight, dark: darkScheme.matches }), VIEWPORT_DEBOUNCE_MS);
 };
 
 const showTabs = createTabStrip(document.getElementById("tabs"), send, focusOverlay);
@@ -81,3 +83,4 @@ const onPress = (/** @type {MouseEvent} */ e) => {
 bindMouse(overlay, send, { onPress, onWheel: player.scrollLocally });
 for (const [type, handler] of Object.entries(keyboard)) overlay.addEventListener(type, handler);
 window.addEventListener("resize", sendViewport);
+darkScheme.addEventListener("change", sendViewport);
