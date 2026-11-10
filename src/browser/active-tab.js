@@ -1,6 +1,8 @@
 // @ts-check
-// Делегаты «активной вкладки»: ввод, прокси ресурсов, снимки iframe и отладка работают как с одной вкладкой,
+// Делегаты «активной вкладки»: ввод, прокси ресурсов и отладка работают как с одной вкладкой,
 // а за ними — та, что активна сейчас.
+
+import { createSerialQueue } from "../util/async.js";
 
 /** @typedef {import("./tabs.js").Tabs} Tabs */
 /** @typedef {import("../cdp/session.js").CdpSession} CdpSession */
@@ -28,16 +30,26 @@ export function createActiveTab(tabs) {
   };
 }
 
+// Размер области клиента запоминаем: после переключения вкладки окно подгоняется под неё заново.
 /** @param {Tabs} tabs @param {() => import("./tabs.js").TabContext} ctx */
-const tabDelegate = (tabs, ctx) => ({
-  get url() { return tabs.active?.tab.url ?? ""; },
-  get frameId() { return ctx().tab.frameId; },
-  evaluate: (/** @type {string} */ expression) => ctx().tab.evaluate(expression),
-  navigate: (/** @type {string} */ url) => ctx().tab.navigate(url),
-  reload: () => ctx().tab.reload(),
-  back: () => ctx().tab.back(),
-  forward: () => ctx().tab.forward(),
-  resize: (width, height) => ctx().tab.resize(width, height),
-});
+// Подгонки окна идут по одной: размер клиента и переключение вкладки могут прийти одновременно.
+const tabDelegate = (tabs, ctx) => {
+  let size = null;
+  const serial = createSerialQueue();
+  const fit = () => serial(async () => size && ctx().tab.resize(size.width, size.height));
+  return {
+    get url() { return tabs.active?.tab.url ?? ""; },
+    get frameId() { return ctx().tab.frameId; },
+    evaluate: (/** @type {string} */ expression) => ctx().tab.evaluate(expression),
+    navigate: (/** @type {string} */ url) => ctx().tab.navigate(url),
+    reload: () => ctx().tab.reload(),
+    back: () => ctx().tab.back(),
+    resize: (/** @type {number} */ width, /** @type {number} */ height) => {
+      size = { width, height };
+      return fit();
+    },
+    refit: fit,
+  };
+};
 
 /** @typedef {ReturnType<typeof createActiveTab>} ActiveTab */

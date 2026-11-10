@@ -1,7 +1,7 @@
 // @ts-check
 // Где фокус и каретка: в поле ввода — позиция выделения; в редакторе (contenteditable, как у ChatGPT) —
 // узлы и смещения выделения по нумерации rrweb, чтобы копия поставила каретку туда же.
-import { changeReporter } from "./channel.js";
+import { changeReporter, onRefresh } from "./channel.js";
 
 /** @typedef {import("../../shared/protocol.js").FocusState} FocusState */
 
@@ -48,4 +48,5 @@ export function watchFocus() {
   const report = changeReporter("focus");
   const update = () => setTimeout(() => report(JSON.stringify(focusState())), 0);
   for (const type of FOCUS_EVENTS) document.addEventListener(type, update, true);
+  onRefresh(update);
 }

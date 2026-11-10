@@ -16,24 +16,3 @@ export function createSerialQueue() {
     return run;
   };
 }
-
-/**
- * Повторяет задачу с паузой между запусками; запуски не перекрываются.
- * @param {string} name @param {number} intervalMs @param {() => unknown} task
- */
-export async function repeat(name, intervalMs, task) {
-  for (;;) {
-    try { await task(); } catch (e) { console.error(`${name}:`, e.message); }
-    await sleep(intervalMs);
-  }
-}
-
-export function createActivity() {
-  let last = 0;
-  return {
-    touch: () => { last = Date.now(); },
-    idleFor: () => Date.now() - last,
-  };
-}
-
-/** @typedef {ReturnType<typeof createActivity>} Activity */

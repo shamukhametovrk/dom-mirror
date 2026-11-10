@@ -12,23 +12,24 @@
 /** @typedef {{ type: "text", text: string }} TextMessage */
 /** @typedef {{ type: "fill", id: number, value: string }} FillMessage */
 /** @typedef {{ type: "scrollTo", id: number, x: number, y: number }} ScrollToMessage */
-/** @typedef {MoveMessage | ButtonMessage | WheelMessage | KeyMessage | TextMessage | FillMessage | ScrollToMessage} InputMessage */
+/** @typedef {Point & { type: "drop", files: string[] }} DropMessage files — id загрузок; сервер заменяет их путями */
+/** @typedef {MoveMessage | ButtonMessage | WheelMessage | KeyMessage | TextMessage | FillMessage | ScrollToMessage | DropMessage} InputMessage */
 /** @typedef {{ type: "viewport", w: number, h: number }} ViewportMessage */
 /** @typedef {{ type: "goto", url: string }} GotoMessage */
-/** @typedef {{ type: "back" | "forward" | "reload" }} HistoryMessage */
-/** @typedef {{ type: "tabNew" } | { type: "tabSwitch" | "tabClose", id: string }} TabMessage */
-/** @typedef {ViewportMessage | GotoMessage | HistoryMessage | TabMessage} NavigationMessage */
-/** @typedef {InputMessage | NavigationMessage} ClientMessage */
+/** @typedef {{ type: "back" | "reload" }} HistoryMessage */
+/** @typedef {{ type: "tabSwitch" | "tabClose", id: string }} TabMessage */
+/** @typedef {{ type: "attach", chooser: string, files: string[] }} AttachMessage файлы для окна выбора, открытого сайтом */
+/** @typedef {ViewportMessage | GotoMessage | HistoryMessage | TabMessage | AttachMessage} ImmediateMessage */
+/** @typedef {InputMessage | ImmediateMessage} ClientMessage */
 
 /** @typedef {{ anchorId: number, anchorOffset: number, focusId: number, focusOffset: number }} EditableSelection */
 /** @typedef {{ id: number | null, start?: number | null, end?: number | null, editable?: EditableSelection | null }} FocusState editable — каретка в contenteditable */
-/** @typedef {{ id: number, x: number, y: number, w: number, h: number }} FrameRect */
-/** @typedef {FrameRect & { img?: string }} FrameUpdate */
-/** @typedef {{ id: string, title: string, url: string, active: boolean }} TabInfo */
+/** @typedef {{ id: string, title: string, url: string, active: boolean, pinned: boolean }} TabInfo pinned — сайт из списка */
+/** @typedef {{ id: string, multiple: boolean, accept: string }} FileChooser */
 /** @typedef {{ id: string, name: string, state: "started" | "done" | "failed" }} DownloadInfo */
 /**
  * @typedef {{ type: "url", url: string } | { type: "events", events: object[] } | ({ type: "focus" } & FocusState)
- *   | { type: "cursor", cursor: string } | { type: "frames", frames: FrameUpdate[] }
+ *   | { type: "cursor", cursor: string } | ({ type: "fileChooser" } & FileChooser)
  *   | { type: "tabs", tabs: TabInfo[] } | { type: "replaced" } | ({ type: "download" } & DownloadInfo)
  *   | { type: "clipboard", text?: string, image?: string }} ServerMessage
  */
@@ -36,6 +37,7 @@
 export const EventType = Object.freeze({ FullSnapshot: 2, IncrementalSnapshot: 3, Meta: 4 });
 export const IncrementalSource = Object.freeze({ Mutation: 0, StyleSheetRule: 8 });
 export const NodeType = Object.freeze({ Element: 2, Text: 3 });
+export const MAX_FILES = 20;
 
 /** @typedef {(value: unknown) => boolean} Check */
 
@@ -49,6 +51,8 @@ const bool = (v) => typeof v === "boolean";
 const optional = (check) => (v) => v === undefined || check(v);
 /** @type {Check} */
 const button = (v) => v === "left" || v === "middle" || v === "right";
+/** @type {Check} */
+const fileIds = (v) => Array.isArray(v) && v.length <= MAX_FILES && v.every(str);
 
 const POINT = { x: num, y: num, mod: optional(num) };
 const KEY = {
@@ -67,14 +71,14 @@ const SCHEMAS = {
   text: { text: str },
   fill: { id: num, value: str },
   scrollTo: { id: num, x: num, y: num },
+  drop: { ...POINT, files: fileIds },
   viewport: { w: num, h: num },
   goto: { url: str },
   back: {},
-  forward: {},
   reload: {},
-  tabNew: {},
   tabSwitch: { id: str },
   tabClose: { id: str },
+  attach: { chooser: str, files: fileIds },
 };
 
 /** @param {any} msg @param {Record<string, Check>} schema */
@@ -99,7 +103,7 @@ export function parseClientMessage(raw) {
   return schema && matches(msg, schema) ? msg : null;
 }
 
-const NAVIGATION_TYPES = new Set(["viewport", "goto", "back", "forward", "reload", "tabNew", "tabSwitch", "tabClose"]);
+const IMMEDIATE_TYPES = new Set(["viewport", "goto", "back", "reload", "tabSwitch", "tabClose", "attach"]);
 
-/** @param {ClientMessage} msg @returns {msg is NavigationMessage} */
-export const isNavigation = (msg) => NAVIGATION_TYPES.has(msg.type);
+/** Выполняется сразу, а не в очереди ввода. @param {ClientMessage} msg @returns {msg is ImmediateMessage} */
+export const isImmediate = (msg) => IMMEDIATE_TYPES.has(msg.type);

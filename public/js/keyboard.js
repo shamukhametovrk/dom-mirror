@@ -13,8 +13,8 @@ const keyMessage = (type, e) => ({
 /** @param {KeyboardEvent} e */
 const isPasteShortcut = (e) => (e.ctrlKey || e.metaKey) && e.code === "KeyV";
 
-/** @param {(msg: ClientMessage) => void} send */
-export function createKeyboard(send) {
+/** @param {(msg: ClientMessage) => void} send @param {(files: File[]) => void} onPasteFiles */
+export function createKeyboard(send, onPasteFiles) {
   // Ctrl+V не отправляем: текст вставки придёт из события paste. Его keyup тоже пропускаем.
   const skipped = new Set();
   const forward = (type, e) => {
@@ -34,8 +34,9 @@ export function createKeyboard(send) {
     },
     paste: (/** @type {ClipboardEvent} */ e) => {
       e.preventDefault();
-      const text = e.clipboardData.getData("text");
-      if (text) send({ type: "text", text });
+      const { files } = e.clipboardData;
+      if (files.length) onPasteFiles([...files]);
+      else if (e.clipboardData.getData("text")) send({ type: "text", text: e.clipboardData.getData("text") });
     },
   };
 }

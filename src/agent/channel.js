@@ -4,6 +4,12 @@
 
 export const DRAIN_GLOBAL = "__mirrorDrain";
 
+// При переключении вкладки сервер просит сообщить всё заново: сообщения фоновой вкладки он отбрасывал.
+/** @type {(() => void)[]} */
+const refreshers = [];
+/** @param {() => void} fn */
+export const onRefresh = (fn) => { refreshers.push(fn); };
+
 /** @type {[string, string][]} */
 const queue = [];
 /** @type {(() => void) | null} */
@@ -18,6 +24,7 @@ export const post = (name, payload) => {
 /** @param {string} name */
 export function changeReporter(name) {
   let last;
+  onRefresh(() => { last = undefined; });
   return (/** @type {string} */ payload) => {
     if (payload === last) return;
     last = payload;
@@ -43,5 +50,6 @@ function waitForItems(timeoutMs) {
 }
 
 export function exposeQueue() {
+  window.__mirrorRefresh = () => refreshers.forEach((fn) => fn());
   window[DRAIN_GLOBAL] = (timeoutMs) => (queue.length ? queue.splice(0) : waitForItems(timeoutMs));
 }

@@ -7,11 +7,10 @@ services:
     shm_size: 1gb              # Chrome держит общую память в /dev/shm
     environment:
       PASSWORD: ${PASSWORD:-}  # пусто — пароль сгенерируется при первом запуске (docker compose exec dom-mirror cat /data/password)
-      START_URL: ${START_URL:-https://ru.wikipedia.org/}
+      SITES: ${SITES:-}        # пусто — Claude, Алиса и ChatGPT
       TZ: ${TZ:-Europe/Moscow}
       ACCEPT_LANGUAGES: ${ACCEPT_LANGUAGES:-ru-RU,ru,en-US,en}
       TRUST_PROXY: "1"         # снаружи только Caddy
-      FRAMES: ${FRAMES:-1}
       DEBUG: ${DEBUG:-0}
     volumes:
       - chrome-profile:/data   # профиль Chrome и пароль: переживают пересоздание контейнера

@@ -30,13 +30,13 @@ function trackNavigation(session, state, events) {
 }
 
 // Размер меняем настоящим окном, а не эмуляцией, чтобы innerWidth/outerWidth оставались правдоподобными.
-/** @param {{ cdp: CdpConnection, targetId: string, evaluate: (e: string) => Promise<any> }} ctx */
-async function resizeWindow({ cdp, targetId, evaluate }, width, height) {
+// Browser.setContentsSize задаёт область страницы, а рамку окна Chrome считает сам: замер innerHeight
+// ненадёжен — только что показанная вкладка ещё отдаёт старый размер.
+/** @param {CdpConnection} cdp @param {string} targetId @param {{ width: number, height: number }} size */
+async function resizeWindow(cdp, targetId, { width, height }) {
   const { windowId } = await cdp.send("Browser.getWindowForTarget", { targetId });
   await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
-  const chrome = await evaluate("({ w: outerWidth - innerWidth, h: outerHeight - innerHeight })");
-  const bounds = { left: 0, top: 0, width: width + chrome.w, height: height + chrome.h };
-  await cdp.send("Browser.setWindowBounds", { windowId, bounds });
+  await cdp.send("Browser.setContentsSize", { windowId, width, height });
 }
 
 /** @param {{ cdp: CdpConnection, targetId: string }} deps */
@@ -60,7 +60,7 @@ export async function createTab({ cdp, targetId }) {
     navigate: (/** @type {string} */ url) => session.send("Page.navigate", { url }),
     reload: () => session.send("Page.reload"),
     back: () => stepHistory(session, -1),
-    forward: () => stepHistory(session, 1),
-    resize: (width, height) => resizeWindow({ cdp, targetId, evaluate }, width, height),
+    resize: (/** @type {number} */ width, /** @type {number} */ height) => resizeWindow(cdp, targetId, { width, height }),
+    setFocused: (/** @type {boolean} */ enabled) => session.send("Emulation.setFocusEmulationEnabled", { enabled }).catch(() => {}),
   };
 }

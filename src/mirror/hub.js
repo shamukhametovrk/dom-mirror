@@ -6,7 +6,6 @@ import { EventType } from "../../shared/protocol.js";
 /** @typedef {import("../../shared/protocol.js").ServerMessage} ServerMessage */
 /** @typedef {import("../../shared/protocol.js").FocusState} FocusState */
 /** @typedef {import("../../shared/protocol.js").TabInfo} TabInfo */
-/** @typedef {import("../browser/frame-capture.js").FrameCapture} FrameCapture */
 /** @typedef {{ readyState: number, send: (data: string) => void, close: (code?: number) => void }} Client */
 /** @typedef {{ base: string, history: object[], focus: FocusState }} MirrorState */
 
@@ -41,24 +40,20 @@ function createClientSet() {
   };
 }
 
-/** @param {MirrorState} state @param {{ url: string, tabs: TabInfo[] }} now @param {FrameCapture} frames @returns {ServerMessage[]} */
-const initialMessages = (state, { url, tabs }, frames) => [
+/** @param {MirrorState} state @param {{ url: string, tabs: TabInfo[] }} now @returns {ServerMessage[]} */
+const initialMessages = (state, { url, tabs }) => [
   { type: "tabs", tabs },
   { type: "url", url },
   { type: "events", events: state.history },
   { type: "focus", ...state.focus },
-  { type: "frames", frames: frames.snapshot() },
 ];
 
-/** @param {{ startUrl: string, currentUrl: () => string, tabs: () => TabInfo[], frames: FrameCapture, rewriter: Rewriter }} deps */
-export function createHub({ startUrl, currentUrl, tabs, frames, rewriter }) {
+/** @param {{ startUrl: string, currentUrl: () => string, tabs: () => TabInfo[], rewriter: Rewriter }} deps */
+export function createHub({ startUrl, currentUrl, tabs, rewriter }) {
   const clients = createClientSet();
   /** @type {MirrorState} */
   const state = { base: startUrl, history: [], focus: { id: null } };
-  const startPage = (href) => {
-    Object.assign(state, { base: href || state.base, history: [], focus: { id: null } });
-    frames.clearRects();
-  };
+  const startPage = (href) => Object.assign(state, { base: href || state.base, history: [], focus: { id: null } });
   return {
     broadcast: clients.broadcast,
     leave: clients.remove,
@@ -77,17 +72,16 @@ export function createHub({ startUrl, currentUrl, tabs, frames, rewriter }) {
     /** @param {Client} client */
     join(client) {
       clients.add(client);
-      for (const msg of initialMessages(state, { url: currentUrl(), tabs: tabs() }, frames)) client.send(JSON.stringify(msg));
+      for (const msg of initialMessages(state, { url: currentUrl(), tabs: tabs() })) client.send(JSON.stringify(msg));
     },
   };
 }
 
 /** @typedef {ReturnType<typeof createHub>} Hub */
 
-/** @param {{ hub: Hub, frames: FrameCapture }} deps */
-export const createAgentHandlers = ({ hub, frames }) => ({
+/** @param {Hub} hub */
+export const createAgentHandlers = (hub) => ({
   emit: (/** @type {string} */ raw) => hub.recordEvent(JSON.parse(raw)),
   focus: (/** @type {string} */ raw) => hub.setFocus(JSON.parse(raw)),
   cursor: (/** @type {string} */ cursor) => hub.setCursor(String(cursor)),
-  frames: (/** @type {string} */ raw) => frames.setRects(JSON.parse(raw)),
 });

@@ -101,6 +101,16 @@ function createFill(session, world) {
   };
 }
 
+const DRAG_COPY = 1;
+
+// Файлы, брошенные на страницу (или вставленные из буфера): настоящее перетаскивание с путями на сервере.
+/** @param {CdpSession} session */
+const createDrop = (session) => async (msg) => {
+  if (!msg.files.length) return;
+  const data = { items: [], files: msg.files, dragOperationsMask: DRAG_COPY };
+  for (const type of ["dragEnter", "dragOver", "drop"]) await session.send("Input.dispatchDragEvent", { type, x: msg.x, y: msg.y, data });
+};
+
 /** @param {{ session: CdpSession, world: World }} deps @returns {(msg: InputMessage) => Promise<unknown>} */
 export function createInputDispatcher({ session, world }) {
   const key = (type) => (msg) => {
@@ -113,6 +123,7 @@ export function createInputDispatcher({ session, world }) {
     keyup: key("keyUp"),
     text: (msg) => session.send("Input.insertText", { text: msg.text }),
     fill: createFill(session, world),
+    drop: createDrop(session),
   };
   return async (msg) => handlers[msg.type](msg);
 }

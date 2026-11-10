@@ -9,7 +9,8 @@ import { connectCdp } from "./cdp/connection.js";
 import { createTabs } from "./browser/tabs.js";
 import { createActiveTab } from "./browser/active-tab.js";
 import { buildAgentSource } from "./browser/agent-source.js";
-import { createFrameCapture, startFrameCapture } from "./browser/frame-capture.js";
+import { createFileChoosers } from "./browser/file-chooser.js";
+import { createUploads } from "./browser/uploads.js";
 import { startDownloads } from "./browser/downloads.js";
 import { createClipboardWatcher, mayCopy } from "./browser/clipboard.js";
 import { acceptLanguage, createResourceResolver, fromChromeCache, viaChromeNetwork, viaNode } from "./resources/resolvers.js";
@@ -22,10 +23,11 @@ import { serveFile, staticRoutes } from "./http/static.js";
 import { createProxyRoute } from "./http/proxy.js";
 import { debugRoutes } from "./http/debug.js";
 import { createDownloadRoute } from "./http/download.js";
+import { createUploadRoute } from "./http/upload.js";
 import { attachWebSocket, isSameOrigin } from "./http/ws.js";
 import { createAuth, guardRoutes } from "./http/auth.js";
 import { resolvePassword } from "./http/password.js";
-import { createActivity, createSerialQueue } from "./util/async.js";
+import { createSerialQueue } from "./util/async.js";
 
 /** @typedef {import("./config.js").Config} Config */
 /** @typedef {Awaited<ReturnType<typeof startBrowser>>} Browser */
@@ -46,20 +48,21 @@ async function startBrowser(config, bus) {
 // Хабу нужен список вкладок, вкладкам — обработчики хаба: связываем через позднее обращение к tabs.
 /** @param {Config} config @param {Browser} browser */
 function startMirror(config, { cdp, source }) {
-  const serial = createSerialQueue();
-  const activity = createActivity();
   /** @type {import("./browser/tabs.js").Tabs | null} */
   let tabs = null;
   const active = createActiveTab(/** @type {any} */ ({ get active() { return tabs?.active ?? null; } }));
-  const frames = createFrameCapture({ session: active.session, serial, activity, settleMs: config.settleMs });
   const signer = createUrlSigner();
   const rewriter = createRewriter(signer.sign);
-  const hub = createHub({ startUrl: config.startUrl, currentUrl: () => active.tab.url, tabs: () => tabs?.list() ?? [], frames, rewriter });
-  tabs = createTabs({ cdp, source, handlers: createAgentHandlers({ hub, frames }), startUrl: config.startUrl });
+  const hub = createHub({ startUrl: config.sites[0].url, currentUrl: () => active.tab.url, tabs: () => tabs?.list() ?? [], rewriter });
+  const choosers = createFileChoosers({ publish: (chooser) => hub.broadcast({ type: "fileChooser", ...chooser }) });
+  tabs = createTabs({ cdp, source, handlers: createAgentHandlers(hub), choosers, sites: config.sites });
   tabs.events.on("url", (url) => hub.broadcast({ type: "url", url }));
   tabs.events.on("changed", (list) => hub.broadcast({ type: "tabs", tabs: list }));
-  if (config.frames) startFrameCapture(frames, () => hub.size > 0, (list) => hub.broadcast({ type: "frames", frames: list }));
-  return { hub, signer, rewriter, tabs, active, onMessage: withClipboard(hub, createCommandHandler({ tab: active.tab, tabs, input: active.input, serial, activity })) };
+  tabs.events.on("activated", () => active.tab.refit().catch((e) => console.error("refit:", e.message)));
+  const uploads = createUploads({ dir: config.uploadsDir });
+  const files = { paths: uploads.paths, attach: choosers.attach };
+  const command = createCommandHandler({ tab: active.tab, tabs, input: active.input, serial: createSerialQueue(), files });
+  return { hub, signer, rewriter, tabs, active, uploads, onMessage: withClipboard(hub, command) };
 }
 
 /** После действий, которые могут что-то скопировать, буфер сервера сверяется и уходит клиенту. */
@@ -94,7 +97,7 @@ async function createRoutes(browser, mirror, { auth, downloads }) {
   const { active } = mirror;
   const debug = debugRoutes({ session: active.session, world: active.world, stats: () => ({ ...stats, tracked: active.tracker.size }) });
   return {
-    ...guardRoutes({ ...staticRoutes({ root: ROOT, rrwebDir: RRWEB_DIR }), ...debug, "/download": createDownloadRoute(downloads) }, auth),
+    ...guardRoutes({ ...staticRoutes({ root: ROOT, rrwebDir: RRWEB_DIR }), ...debug, "/download": createDownloadRoute(downloads), "/upload": createUploadRoute(mirror.uploads) }, auth),
     "/login": (req, res, url) => (req.method === "POST" ? auth.login(req, res) : loginPage(req, res, url)),
     "/logout": auth.logout,
     "/health": (_req, res) => reply(res, 200, "ok"),
@@ -107,7 +110,7 @@ function startServer({ config, mirror, auth, routes }) {
   const server = http.createServer(createRouter(routes));
   const isAllowed = (req) => auth.isAuthorized(req) && isSameOrigin(req, config.trustProxy);
   attachWebSocket({ server, hub: mirror.hub, onMessage: mirror.onMessage, isAllowed, debug: config.debug });
-  server.listen(config.port, () => console.log(`dom-mirror: http://localhost:${config.port}  (start: ${config.startUrl})`));
+  server.listen(config.port, () => console.log(`dom-mirror: http://localhost:${config.port}  (${config.sites.map((s) => s.name).join(", ")})`));
 }
 
 async function main() {
@@ -121,7 +124,6 @@ async function main() {
   const browser = await startBrowser(config, bus);
   const mirror = startMirror(config, browser);
   await mirror.tabs.init();
-  if (mirror.active.tab.url === "about:blank") mirror.active.tab.navigate(config.startUrl).catch((e) => console.error("goto:", e.message));
   const downloads = await startDownloads({
     cdp: browser.cdp, dir: config.downloadsDir, onEvent: (event) => mirror.hub.broadcast({ type: "download", ...event }),
   });

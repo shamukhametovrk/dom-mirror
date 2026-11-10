@@ -3,6 +3,8 @@ FROM node:22-bookworm-slim
 # Версия Chrome закреплена, чтобы сборки были воспроизводимыми. Список: versionhistory.googleapis.com
 ARG CHROME_VERSION=157.0.8103.38
 ENV NODE_ENV=production
+# UTF-8: иначе Chrome не принимает файлы с не-ASCII именами (прикрепление файлов)
+ENV LANG=C.UTF-8
 
 # Пакеты и Chrome — отдельными слоями: если скачивание Chrome сорвётся, пакеты при повторе возьмутся из кэша.
 RUN apt-get -o Acquire::Retries=5 update \

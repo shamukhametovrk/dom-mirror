@@ -16,7 +16,7 @@ export function removeOld(dir, maxAgeMs) {
   const now = Date.now();
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
-    if (now - fs.statSync(file).mtimeMs >= maxAgeMs) fs.rmSync(file, { force: true });
+    if (now - fs.statSync(file).mtimeMs >= maxAgeMs) fs.rmSync(file, { force: true, recursive: true });
   }
 }
 

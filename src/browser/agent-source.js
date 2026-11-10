@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const AGENT_DIR = new URL("../agent/", import.meta.url);
-const MODULES = ["channel.js", "recorder.js", "focus.js", "cursor.js", "frames.js", "index.js"];
+const MODULES = ["channel.js", "recorder.js", "focus.js", "cursor.js", "index.js"];
 
 /** @param {string} code */
 export const toScript = (code) => code

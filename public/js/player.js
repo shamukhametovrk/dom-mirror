@@ -3,12 +3,15 @@
 import { EventType, IncrementalSource } from "../../shared/protocol.js";
 import { smoothScrolling } from "./scroll-smoother.js";
 import { createLocalScroll } from "./local-scroll.js";
+import { focusedPoint, predictCaret } from "./caret.js";
 
 /** @typedef {import("../../shared/protocol.js").FocusState} FocusState */
 /** @typedef {Record<string, (e: Event) => void>} Handlers */
 
 const REPLAYER_OPTIONS = { liveMode: true, mouseTail: false, triggerFocus: false, showWarning: false };
 const FOCUS_DELAY_MS = 30;
+// столько копия держит предсказанную каретку, если сервер не сообщил о фокусе (клик мимо поля на сервере)
+const PREDICTION_HOLD_MS = 700;
 const FILL_DEBOUNCE_MS = 150;
 const TEXT_FIELDS = new Set(["INPUT", "TEXTAREA"]);
 const FORM_FIELDS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
@@ -50,6 +53,9 @@ function createScrolling(getReplayer, send) {
 /** @param {Event} e */
 const keepEditorsReadOnly = (e) => /** @type {HTMLElement} */ (e.target)?.isContentEditable && e.preventDefault();
 
+/** @param {Handlers} handlers @param {(e: Event) => void} input @returns {Handlers} */
+const copyHandlers = (handlers, input) => ({ ...handlers, input, beforeinput: keepEditorsReadOnly, drop: keepEditorsReadOnly });
+
 // rrweb пересобирает документ через document.open(), который стирает обработчики окна iframe
 /** @param {() => any} getReplayer @param {Handlers} handlers */
 const createIframeHook = (getReplayer, handlers) => () => {
@@ -65,9 +71,7 @@ export function createPlayer({ root, handlers, onFill, onBlur, send }) {
   let replayer = null;
   const scrolling = createScrolling(() => replayer, send);
   const mirror = () => replayer.getMirror();
-  const hookIframe = createIframeHook(() => replayer, {
-    ...handlers, input: createFillWatcher(mirror, onFill), beforeinput: keepEditorsReadOnly, drop: keepEditorsReadOnly,
-  });
+  const hookIframe = createIframeHook(() => replayer, copyHandlers(handlers, createFillWatcher(mirror, onFill)));
   const focus = createFocusMirror(() => replayer, hookIframe, onBlur);
   const syncValues = createValueSync(mirror, focus.apply);
 
@@ -83,6 +87,8 @@ export function createPlayer({ root, handlers, onFill, onBlur, send }) {
     // время событий — по часам сервера; ставим свои, чтобы live-режим проигрывал сразу
     addEvent: (event) => replayer.addEvent({ ...event, timestamp: Date.now() }),
     setFocus: focus.set,
+    predictFocus: focus.predict,
+    focusedPoint: () => focusedPoint(replayer.iframe),
     scrollLocally: scrolling.handle,
     flushScroll: scrolling.flush,
   };
@@ -117,23 +123,32 @@ function placeCaret(replayer, focus) {
   return kind !== null;
 }
 
-// Поле или редактор в фокусе на сервере фокусируем и в копии, вместе с кареткой.
+// Поле или редактор в фокусе на сервере фокусируем и в копии, вместе с кареткой. По клику в поле копия ставит
+// каретку сразу, не дожидаясь сервера; его ответ потом уточняет её или снимает.
 /** @param {() => any} getReplayer @param {() => void} hookIframe @param {() => void} onBlur */
 function createFocusMirror(getReplayer, hookIframe, onBlur) {
   /** @type {FocusState} */
   let focus = { id: null };
+  let holdUntil = 0;
+  const doc = () => getReplayer()?.iframe?.contentDocument;
   const apply = () => {
-    const doc = getReplayer()?.iframe?.contentDocument;
-    if (!doc) return;
+    if (!doc()) return;
     hookIframe();
-    if (!placeCaret(getReplayer(), focus)) blurCopy(doc, onBlur);
+    if (Date.now() >= holdUntil && !placeCaret(getReplayer(), focus)) blurCopy(doc(), onBlur);
   };
   return {
     apply,
     /** @param {FocusState} next */
     set(next) {
       focus = next;
+      holdUntil = 0;
       setTimeout(apply, FOCUS_DELAY_MS);
+    },
+    /** @param {number} x @param {number} y — координаты в копии */
+    predict(x, y) {
+      if (!doc() || !predictCaret(doc(), x, y)) return;
+      holdUntil = Date.now() + PREDICTION_HOLD_MS;
+      setTimeout(apply, PREDICTION_HOLD_MS);
     },
   };
 }

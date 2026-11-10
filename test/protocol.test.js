@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isNavigation, parseClientMessage } from "../shared/protocol.js";
+import { isImmediate, parseClientMessage } from "../shared/protocol.js";
 
 const parse = (msg) => parseClientMessage(JSON.stringify(msg));
 
@@ -20,9 +20,13 @@ test("отбрасывает мусор", () => {
   assert.equal(parse({ type: "move", x: "1", y: 2 }), null);
   assert.equal(parse({ type: "down", x: 1, y: 2, button: "side", count: 1 }), null);
   assert.equal(parse({ type: "viewport", w: Infinity, h: 1 }), null);
+  assert.equal(parse({ type: "attach", chooser: "c", files: [1] }), null);
+  assert.equal(parse({ type: "drop", x: 1, y: 1, files: Array(21).fill("f") }), null);
 });
 
-test("различает навигацию и ввод", () => {
-  assert.equal(isNavigation({ type: "goto", url: "x" }), true);
-  assert.equal(isNavigation({ type: "text", text: "x" }), false);
+test("различает команды и ввод", () => {
+  assert.equal(isImmediate({ type: "goto", url: "x" }), true);
+  assert.equal(isImmediate({ type: "text", text: "x" }), false);
+  assert.equal(isImmediate({ type: "drop", x: 1, y: 1, files: [] }), false);
+  assert.equal(isImmediate({ type: "attach", chooser: "c", files: [] }), true);
 });

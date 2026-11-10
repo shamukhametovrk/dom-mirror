@@ -42,7 +42,7 @@ const positionIn = (overlay) => (/** @type {MouseEvent} */ e) => {
 /**
  * onWheel возвращает true, если копия прокрутила сама; иначе колесо уходит на сервер.
  * @param {HTMLElement} overlay @param {Send} send
- * @param {{ onPress: () => void, onWheel: (wheel: import("./local-scroll.js").Wheel) => boolean }} hooks
+ * @param {{ onPress: (e: MouseEvent) => void, onWheel: (wheel: import("./local-scroll.js").Wheel) => boolean }} hooks
  */
 export function bindMouse(overlay, send, { onPress, onWheel }) {
   const position = positionIn(overlay);
@@ -52,7 +52,7 @@ export function bindMouse(overlay, send, { onPress, onWheel }) {
 
   overlay.addEventListener("mousedown", (e) => {
     e.preventDefault();
-    onPress();
+    onPress(e);
     moves.flush();
     held.add(e.button);
     send(buttonMessage("down", e));
